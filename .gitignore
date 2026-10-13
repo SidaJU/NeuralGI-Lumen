@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# 日志
+*.log
+
+# 说明：以下产物体积都很小（整个项目约 24 MB），因此【保留】在仓库中：
+#   runs/*/best.pt      训练 checkpoint（几十 KB，见 runs/CHECKPOINTS.md 登记）
+#   *.onnx / *.engine   导出的推理模型（NNE / TensorRT）
+#   output/ experiments/ 中的 PNG  实验对比图与推理效果证据
