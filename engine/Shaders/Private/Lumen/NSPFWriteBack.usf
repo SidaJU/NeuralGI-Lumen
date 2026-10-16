@@ -1,0 +1,52 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+//
+// [theozhu++] NSPF S4.2: 把神经网络输出写回 probe atlas
+//
+// 对应官方 NNEDenoiser 的 OutputProcess: 用 compute shader 从 NNE 的
+// output buffer 读出结果, 写进目标纹理 (官方从不回读到 CPU).
+//
+// 模型输出是 log1p 域 (训练时 target = log1p(radiance)), 这里用 expm1 还原,
+// 与 Python 侧 eval/visualize 的 np.expm1(out) 保持一致.
+// [theozhu--]
+
+// 与 Lumen 其他 shader 一致: "../Common.ush" (Common.ush 在 Private/ 下)
+#include "../Common.ush"
+
+#define NSPF_THREAD_GROUP_SIZE 8
+
+// 用 int2 与 C++ 侧 FIntPoint 对应
+int2 AtlasViewSize;
+
+// NNE 输出: 每个样本 3 个 float (log 域)
+Buffer<float> InputOutputBuffer;
+
+// 目标纹理 (probe atlas)
+RWTexture2D<float3> OutputRadianceTexture;
+
+// 诊断用: 整体缩放 NN 输出 (默认 1.0). 设成 3.0 若画面 GI 明显变亮,
+// 即可证明 NN 输出确实进入了最终画面.
+float DebugScale;
+
+[numthreads(NSPF_THREAD_GROUP_SIZE, NSPF_THREAD_GROUP_SIZE, 1)]
+void WriteBackCS(uint3 DispatchThreadId : SV_DispatchThreadID)
+{
+	int2 AtlasCoord = (int2)DispatchThreadId.xy;
+	if (any(AtlasCoord >= AtlasViewSize))
+	{
+		return;
+	}
+
+	const uint LinearIndex = (uint)(AtlasCoord.y * AtlasViewSize.x + AtlasCoord.x);
+	const uint Base = LinearIndex * 3u;
+
+	const float3 LogOut = float3(
+		InputOutputBuffer[Base    ],
+		InputOutputBuffer[Base + 1],
+		InputOutputBuffer[Base + 2]);
+
+	// log1p -> 线性 (与 Python np.expm1 一致), 并夹掉负值
+	const float3 Radiance = max(exp(LogOut) - 1.0, 0.0);
+
+	// 诊断缩放 (默认 1.0 不改变结果)
+	OutputRadianceTexture[AtlasCoord] = Radiance * DebugScale;
+}

@@ -1,0 +1,200 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+//
+// [theozhu++] NSPF S4.2: 构建神经网络输入特征 (56 维)
+//
+// 对照官方 NNEDenoiser 的 InputProcess: 用 compute shader 把纹理数据
+// 写进 NNE 的 input buffer (官方从不用 CPU 上传).
+//
+// 一个线程 = 一个 (probe, 方向格子) = atlas 的一个 texel = 一个样本.
+// 输出 56 维特征, 与 Python 侧 probe_dataset._build_features 对齐:
+//
+//   [0:27]   3x3 邻域 radiance (同方向, 跨 9 个 probe) -> 9*3
+//   [27:36]  3x3 邻域 hitdist                          -> 9
+//   [36:45]  3x3 邻域 valid                            -> 9
+//   [45:52]  几何: log深度(1) + 法线(3) + 相对坐标(3)   -> 7
+//   [52:55]  历史 radiance (重投影)                     -> 3   [第一版填 0]
+//   [55]     历史是否有效                                -> 1   [第一版填 0]
+//
+// 第一版: 历史通道留 0. 训练时 use_history=False, 模型这 4 维见到的就是 0,
+// 与训练分布一致 —— 见 tools/dataset/probe_dataset.py.
+// [theozhu--]
+
+// 与 Lumen 其他 shader 一致: Common.ush 在上一级目录 (Private/), 必须写 "../".
+// 直接写 "Common.ush" 会报 File 'Common.ush' not found.
+// 注: 刻意不 include LumenScreenProbeCommon.ush —— 本 shader 自带全部所需参数
+// (AtlasViewSize / ProbeViewSize / GatherResolution), 引入它反而会连带
+// ScreenProbeParameters uniform buffer 等额外依赖.
+#include "../Common.ush"
+
+#define NSPF_THREAD_GROUP_SIZE 8
+
+// 与 ScreenProbeParameters 一致
+// 用 int2/int 而不是 uint2/uint: 与 C++ 侧标准 SHADER_PARAMETER 类型
+// (FIntPoint / int32) 直接对应, 避免类型不匹配.
+int2   AtlasViewSize;          // atlas 尺寸 (probe网格 * gatherRes)
+int2   ProbeViewSize;          // probe 网格 (如 90x35 / 51x29)
+int    GatherResolution;       // gather 八面体分辨率 (8)
+float  DownsampleFactor;       // 16
+
+// 输入纹理
+Texture2D<float3> CompositedRadianceTexture;   // atlas, 滤波前
+Texture2D<float>  HitDistanceTexture;          // atlas
+Texture2D<float>  SceneDepthTexture;           // probe 级
+Texture2D<float3> WorldNormalTexture;          // probe 级
+Texture2D<float3> WorldPositionTexture;        // probe 级
+// 不需要 sampler: 全部用 .Load() 做 texel fetch (Texture2D 不支持 operator[])
+
+// 输出: 每个样本 56 个 float
+RWBuffer<float> OutputFeatureBuffer;
+
+uint BufferOffset(int2 AtlasCoord)
+{
+	// atlas -> 线性样本索引
+	// 52 = 52 维特征 (不含历史). 必须与 cpp 的 NSPF_IN_DIM 一致.
+	return (uint)(AtlasCoord.y * AtlasViewSize.x + AtlasCoord.x) * 52u;
+}
+
+[numthreads(NSPF_THREAD_GROUP_SIZE, NSPF_THREAD_GROUP_SIZE, 1)]
+void BuildFeaturesCS(uint3 DispatchThreadId : SV_DispatchThreadID)
+{
+	int2 AtlasCoord = (int2)DispatchThreadId.xy;
+	if (any(AtlasCoord >= AtlasViewSize))
+	{
+		return;
+	}
+
+	const int GatherRes = GatherResolution;
+
+	// ---- atlas texel -> probe 坐标 + probe 内方向格子 ----
+	const int2 ProbeCoord     = AtlasCoord / GatherRes;    // 第几个 probe
+	const int2 TexelInProbe   = AtlasCoord % GatherRes;    // 该 probe 内第几个方向格子
+
+	const uint Base = BufferOffset(AtlasCoord);
+
+	// ---- 中心 probe 的几何 (probe 级纹理, 用 probe 坐标采样) ----
+	const float  CenterDepth  = SceneDepthTexture.Load(int3(ProbeCoord, 0)).r;
+	const float3 CenterNormal = WorldNormalTexture.Load(int3(ProbeCoord, 0)).rgb;
+	const float3 CenterWPos   = WorldPositionTexture.Load(int3(ProbeCoord, 0)).rgb;
+
+	// ---- 3x3 邻域: 方向不变, probe 变 (复刻 Lumen 空间滤波) ----
+	// 顺序与 Python _build_features 一致: dy 从 -1 到 1, dx 从 -1 到 1
+	uint OutIdx = 0;
+	uint ValidBase = 0;
+
+	[unroll]
+	for (int dy = -1; dy <= 1; ++dy)
+	{
+		[unroll]
+		for (int dx = -1; dx <= 1; ++dx)
+		{
+			const int2 NeighborProbe = (int2)ProbeCoord + int2(dx, dy);
+
+			// 边界检查: 越界的 probe 视为无效
+			bool bValid = all(NeighborProbe >= int2(0, 0))
+			           && all(NeighborProbe <  (int2)ProbeViewSize);
+
+			float3 Radiance = 0;
+			float  HitDist  = 0;
+
+			if (bValid)
+			{
+				// 邻域 probe 的【同一方向格子】
+				const int2 NeighborAtlasCoord =
+					NeighborProbe * GatherRes + TexelInProbe;
+
+				// 关键: Python 侧 r_in = log_normalize(cur["in"]) —— 即 log1p.
+				// 特征里的 radiance 必须是【log 域】的, 直接填线性值会因量级
+				// 差几个数量级导致网络输出完全错误.
+				Radiance = log(1.0 + max(
+					CompositedRadianceTexture.Load(int3(NeighborAtlasCoord, 0)).rgb, 0.0));
+				HitDist  = HitDistanceTexture.Load(int3(NeighborAtlasCoord, 0)).r;
+
+				// probe 级 depth <= 0 表示该 probe 无效
+				const float NDepth = SceneDepthTexture.Load(int3(NeighborProbe, 0)).r;
+				bValid = (NDepth > 0);
+			}
+
+			// [0:27] 邻域 radiance
+			OutputFeatureBuffer[Base + OutIdx    ] = Radiance.r;
+			OutputFeatureBuffer[Base + OutIdx + 1] = Radiance.g;
+			OutputFeatureBuffer[Base + OutIdx + 2] = Radiance.b;
+			OutIdx += 3;
+		}
+	}
+
+	// [27:36] 邻域 hitdist
+	[unroll]
+	for (int dy2 = -1; dy2 <= 1; ++dy2)
+	{
+		[unroll]
+		for (int dx2 = -1; dx2 <= 1; ++dx2)
+		{
+			const int2 NeighborProbe = (int2)ProbeCoord + int2(dx2, dy2);
+			bool bValid = all(NeighborProbe >= int2(0, 0))
+			           && all(NeighborProbe <  (int2)ProbeViewSize);
+
+			float HitDist = 0;
+			if (bValid)
+			{
+				const int2 NeighborAtlasCoord =
+					NeighborProbe * GatherRes + TexelInProbe;
+				HitDist = HitDistanceTexture.Load(int3(NeighborAtlasCoord, 0)).r;
+			}
+			OutputFeatureBuffer[Base + 27 + (dy2 + 1) * 3 + (dx2 + 1)] = HitDist;
+		}
+	}
+
+	// [36:45] 邻域 valid
+	[unroll]
+	for (int dy3 = -1; dy3 <= 1; ++dy3)
+	{
+		[unroll]
+		for (int dx3 = -1; dx3 <= 1; ++dx3)
+		{
+			const int2 NeighborProbe = (int2)ProbeCoord + int2(dx3, dy3);
+			bool bInRange = all(NeighborProbe >= int2(0, 0))
+			             && all(NeighborProbe <  (int2)ProbeViewSize);
+			float V = 0;
+			if (bInRange)
+			{
+				V = (SceneDepthTexture.Load(int3(NeighborProbe, 0)).r > 0) ? 1.0 : 0.0;
+			}
+			OutputFeatureBuffer[Base + 36 + (dy3 + 1) * 3 + (dx3 + 1)] = V;
+		}
+	}
+
+	// ---- [45:52] 几何 (严格对齐 Python probe_dataset._build_features) ----
+	//
+	// 无效 probe 的几何必须整体清零: Python 里 geo[~valid] = 0, 因为无效 probe
+	// 的 wpos 可能是 -1e8 量级的垃圾值, 混进特征会让网络在对应输入上输出
+	// 爆炸值 (实测可达 1e6). 无效 probe 反正会被 valid mask 排除.
+	const bool bCenterValid = (CenterDepth > 0.0);
+
+	float  GeoDepth = 0.0;
+	float3 GeoWPos  = float3(0, 0, 0);
+
+	if (bCenterValid)
+	{
+		// 深度: 量级可达数万(cm), 取【符号对数】压缩, 与 Python 完全一致
+		GeoDepth = sign(CenterDepth) * log(1.0 + abs(CenterDepth));
+
+		// 世界坐标: Python 用 (w - 有效probe中位数) / 1000, 转成"米"为单位的
+		// 相对偏移. shader 里算中位数需要额外 reduction pass, 这里用
+		// 【translated 坐标系下相机位于原点附近】这一性质近似:
+		// w/1000 与 (w-med)/1000 同量级, 空间关系保留.
+		GeoWPos = CenterWPos / 1000.0;
+	}
+
+	OutputFeatureBuffer[Base + 45] = GeoDepth;
+	OutputFeatureBuffer[Base + 46] = bCenterValid ? CenterNormal.x : 0.0;
+	OutputFeatureBuffer[Base + 47] = bCenterValid ? CenterNormal.y : 0.0;
+	OutputFeatureBuffer[Base + 48] = bCenterValid ? CenterNormal.z : 0.0;
+	OutputFeatureBuffer[Base + 49] = GeoWPos.x;
+	OutputFeatureBuffer[Base + 50] = GeoWPos.y;
+	OutputFeatureBuffer[Base + 51] = GeoWPos.z;
+
+	// 本 shader 输出【52】维, 不含历史通道.
+	//   训练用 --no-history 时模型 in_dim=52 (历史维度被完全移除, 不是填 0).
+	//   若改用带历史的模型 (in_dim=56), 这里必须补写 [52:55] 历史 radiance
+	//   与 [55] 历史有效, 并同步把本文件 stride 和 cpp 的 NSPF_IN_DIM 改回 56.
+}
