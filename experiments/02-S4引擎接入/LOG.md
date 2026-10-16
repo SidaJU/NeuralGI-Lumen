@@ -217,3 +217,64 @@ CVar：
 - `r.Lumen.ScreenProbeNSPF.Model`（资产路径）
 
 P4: CL **107315**
+
+---
+
+## 9. ⭐ 坑：NN 输出被绕过 —— 替换时机必须在 SH 编码之前
+
+### 症状（极具迷惑性）
+
+- 全流程日志正常：特征构建 → `EnqueueRDG OK` → 写回 → `★ NN 滤波已应用`
+- 连续跑 600+ 帧**无任何失败**
+- 但 `DebugScale=0`（把 NN 输出清零）→ **画面毫无变化**
+
+### 根因
+
+`FilterScreenProbes` 里的 `ConvertToIrradiance` pass 会把 `ScreenProbeRadiance` 编码成下游真正消费的量：
+
+```
+ScreenProbeRadianceSHAmbient        （球谐 ambient）
+ScreenProbeRadianceSHDirectional    （球谐 directional）
+ScreenProbeIrradianceWithBorder     （带边界 irradiance）
+```
+
+而 gather 阶段（`LumenScreenProbeGather.cpp:1761` 把整个 `GatherParameters` 传给 pass）
+**消费的是这些编码后的量，不是原始 radiance**。
+
+原来的集成点在函数**末尾** —— 那时 SH 早已用传统 radiance 编码完成，替换原始 radiance 完全无效：
+
+```
+❌ 修复前
+传统滤波 → ConvertToSH(用传统radiance编码) → 我们替换原始radiance → gather 用传统 SH → NN 被绕过
+
+✅ 修复后
+传统滤波 → 【NN pass → 覆盖 ScreenProbeRadiance】 → ConvertToSH(用NN结果编码) → gather 用 NN SH ✓
+```
+
+### 修复
+
+`LumenScreenProbeFiltering.cpp` 中把 `AddNSPFFilterPass` 调用**移到 `ConvertToIrradiance` pass 之前**，并覆盖局部变量：
+
+```cpp
+if (FRDGTextureRef NNRadiance = LumenScreenProbeNSPF::AddNSPFFilterPass(...))
+{
+    ScreenProbeRadiance = NNRadiance;   // 覆盖 → 后续编码与 gather 全用 NN 结果
+}
+// 函数末尾只保留：
+GatherParameters.ScreenProbeRadiance = ScreenProbeRadiance;   // 已是 NN 或传统
+```
+
+### 教训（本项目最有价值的一条）
+
+1. **“日志显示跑通” ≠ “影响画面”** —— 必须有**可观测的因果验证**。
+   本项目的方法是 `DebugScale` CVar：设 `0` 应让 GI 消失、设 `50` 应让 GI 爆亮、设 `1` 恢复。
+   正是这个方法证明了“跑通但无效果”，进而定位到根因。
+
+2. 集成进引擎管线时，先确认**下游真正消费的是哪个量**（原始值 vs 编码后的 SH / mip），
+   不要只替换最表面的那个。
+
+3. 集成点应选在**派生量生成之前**，否则派生量仍是旧值。
+
+### 验证结果
+
+修复后 `DebugScale` 三个值均有明显响应 → NN 输出确实驱动最终画面，**S4.2 接入完成** ✅

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>项目结构与脚本说明 · NeuralGI-Lumen</title>
+<style>
+  :root{
+    --bg:#f6f7f9;--card:#fff;--ink:#1b1f27;--muted:#5f6875;--line:#e4e7ec;
+    --blue:#2563eb;--cyan:#0891b2;--orange:#d97706;--green:#16a34a;
+    --red:#dc2626;--purple:#7c3aed;--code:#f1f3f6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+    line-height:1.8;font-size:15.5px}
+  .layout{display:flex;min-height:100vh}
+  nav{width:250px;flex:0 0 250px;background:var(--card);border-right:1px solid var(--line);
+    padding:24px 0;position:sticky;top:0;height:100vh;overflow-y:auto}
+  nav h2{font-size:12px;color:var(--muted);margin:0 0 12px 20px;letter-spacing:.1em}
+  nav a{display:block;padding:8px 20px;color:var(--ink);text-decoration:none;
+    font-size:14px;border-left:3px solid transparent}
+  nav a:hover{background:#eef2f7;border-left-color:var(--blue)}
+  main{flex:1;padding:34px 44px;max-width:1040px}
+  h1{font-size:28px;margin:0 0 4px}
+  .sub{color:var(--muted);margin-bottom:26px;font-size:14px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:26px 30px;margin-bottom:22px}
+  h3{margin:0 0 14px;font-size:21px;padding-bottom:10px;border-bottom:2px solid var(--line)}
+  h4{margin:20px 0 8px;font-size:16.5px;color:var(--blue)}
+  p{margin:10px 0}
+  code{background:var(--code);padding:2px 6px;border-radius:4px;
+    font-family:Consolas,monospace;font-size:13.5px}
+  pre{background:var(--code);padding:14px 16px;border-radius:8px;overflow-x:auto;
+    font-family:Consolas,monospace;font-size:12.5px;line-height:1.6;
+    border-left:3px solid var(--blue)}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:9px 12px;text-align:left}
+  th{background:#eef2f7}
+  .key{background:#eff6ff;border-left:4px solid var(--blue);padding:12px 16px;
+    border-radius:6px;margin:14px 0}
+  .warn{background:#fffbeb;border-left:4px solid var(--orange);padding:12px 16px;
+    border-radius:6px;margin:14px 0}
+  .ok{background:#f0fdf4;border-left:4px solid var(--green);padding:12px 16px;
+    border-radius:6px;margin:14px 0}
+  figure{margin:20px 0;text-align:center}
+  figcaption{font-size:13px;color:var(--muted);margin-top:8px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  .box{border:1px solid var(--line);border-radius:8px;padding:14px}
+  @media(max-width:900px){
+    .layout{flex-direction:column}nav{width:100%;height:auto;position:static}
+    main{padding:18px}.grid2,.grid3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav>
+  <h2>项目结构</h2>
+  <a href="#goal">0. 项目目标</a>
+  <a href="#arch">1. 整体架构</a>
+  <a href="#engine">2. 引擎侧（UE C++）</a>
+  <a href="#runtime">3. ★ 引擎内实时链路</a>
+  <a href="#python">4. Python 侧目录</a>
+  <a href="#scripts">5. 脚本详解</a>
+  <a href="#flow">6. 完整数据流</a>
+  <a href="#paths">7. 三条通路与模型</a>
+  <a href="#progress">8. 当前进度</a>
+  <a href="#constraint">9. 重要约束与坑</a>
+  <a href="#vcs">10. 版本管理与文档</a>
+</nav>
+
+<main>
+  <h1>项目结构与脚本说明</h1>
+  <p class="sub">NeuralGI-Lumen —— 用神经网络替换 UE Lumen 屏幕探针传统滤波 · 含引擎侧与 Python 侧全链路</p>
+
+  <!-- 0 -->
+  <section id="goal">
+    <h3>0. 项目目标（一句话）</h3>
+    <div class="key">
+      <strong>让 Lumen 的屏幕探针在 64 射线输入下，得到接近 256 射线的 GI 画质</strong> —— 用 NN 替换其手工启发式滤波。
+    </div>
+    <p>最初的设想是"降射线省性能"（64→16），但实测发现 Lumen 的 shader 只编译 <code>Trace=8/16/32</code> 三档，该路线不可行，因此转为<strong>画质提升</strong>路线。</p>
+  </section>
+
+  <!-- 1 -->
+  <section id="arch">
+    <h3>1. 整体架构（两大块）</h3>
+    <figure>
+      <svg viewBox="0 0 720 260" style="max-width:100%;height:auto">
+        <!-- 引擎侧 -->
+        <rect x="15" y="20" width="290" height="220" fill="#eff6ff" stroke="#2563eb" rx="8"/>
+        <text x="160" y="45" font-size="14" font-weight="700" text-anchor="middle" fill="#2563eb">引擎侧（UE 5.6 C++）</text>
+        <rect x="35" y="60" width="250" height="42" fill="#dbeafe" stroke="#2563eb" rx="5"/>
+        <text x="160" y="86" font-size="12" text-anchor="middle">LumenScreenProbeDump</text>
+        <text x="160" y="100" font-size="10" text-anchor="middle" fill="#5f6875">6 路 readback 采集 → npy（训练数据）</text>
+        <rect x="35" y="115" width="250" height="42" fill="#dcfce7" stroke="#16a34a" rx="5"/>
+        <text x="160" y="141" font-size="12" text-anchor="middle">LumenScreenProbeNSPF</text>
+        <text x="160" y="155" font-size="10" text-anchor="middle" fill="#5f6875">NNE 实时推理（三段式）</text>
+        <!-- 箭头：训练数据 -->
+        <path d="M305,81 H420" stroke="#0891b2" stroke-width="2.5" marker-end="url(#ar1)"/>
+        <text x="362" y="70" font-size="10" fill="#0891b2" text-anchor="middle">npy 数据</text>
+        <!-- 箭头：模型回流 -->
+        <path d="M420,175 H305" stroke="#dc2626" stroke-width="2.5" marker-end="url(#ar2)"/>
+        <text x="362" y="192" font-size="10" fill="#dc2626" text-anchor="middle">onnx 模型</text>
+
+        <!-- Python 侧 -->
+        <rect x="425" y="20" width="285" height="220" fill="#f0fdf4" stroke="#16a34a" rx="8"/>
+        <text x="567" y="45" font-size="14" font-weight="700" text-anchor="middle" fill="#16a34a">Python 侧</text>
+        <rect x="445" y="60" width="245" height="36" fill="#fff" stroke="#16a34a" rx="5"/>
+        <text x="567" y="82" font-size="12" text-anchor="middle">tools/dataset（特征构建）</text>
+        <rect x="445" y="105" width="245" height="36" fill="#fff" stroke="#16a34a" rx="5"/>
+        <text x="567" y="127" font-size="12" text-anchor="middle">train/（模型 + 训练）</text>
+        <rect x="445" y="150" width="245" height="36" fill="#fff" stroke="#16a34a" rx="5"/>
+        <text x="567" y="172" font-size="12" text-anchor="middle">tools/export_onnx（导出）</text>
+        <rect x="445" y="195" width="245" height="30" fill="#fff" stroke="#16a34a" rx="5"/>
+        <text x="567" y="214" font-size="11" text-anchor="middle">eval / verify / capture</text>
+        <defs>
+          <marker id="ar1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 z" fill="#0891b2"/></marker>
+          <marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0,0 L9,4.5 L0,9 z" fill="#dc2626"/></marker>
+        </defs>
+      </svg>
+      <figcaption>引擎侧负责采集与实时推理；Python 侧负责训练、评估、导出，模型回流到引擎</figcaption>
+    </figure>
+    <p><strong>闭环</strong>：引擎采集数据 → Python 训练 → 导出 onnx → 引擎加载推理 → （需要时再采集新数据迭代）。</p>
+  </section>
+
+  <!-- 2 -->
+  <section id="engine">
+    <h3>2. 引擎侧（UE C++）</h3>
+    <table>
+      <tr><th>文件</th><th>作用</th></tr>
+      <tr><td><code>LumenScreenProbeDump.h/.cpp</code></td><td>训练数据采集：6 路 GPU buffer readback → 写 npy/json</td></tr>
+      <tr><td><code>LumenScreenProbeNSPF.h/.cpp</code></td><td><strong>NNE 推理接入</strong>（S4.2）：三段式 + CVar + 失败自动回退</td></tr>
+      <tr><td><code>NSPFFeatureBuild.usf</code></td><td>特征构建 compute shader（52 维/样本）</td></tr>
+      <tr><td><code>NSPFWriteBack.usf</code></td><td>写回 compute shader（expm1 还原 + DebugScale）</td></tr>
+      <tr><td><code>LumenScreenProbeFiltering.cpp</code></td><td>接入点（★ 在 ConvertToSH 之前）</td></tr>
+      <tr><td><code>Renderer.Build.cs</code></td><td>加 <code>NNE</code> 模块依赖</td></tr>
+    </table>
+
+    <h4>CVar 控制</h4>
+    <table>
+      <tr><th>CVar</th><th>说明</th></tr>
+      <tr><td><code>r.Lumen.ScreenProbeNSPF.Enable</code></td><td>0/1，开启 NN 滤波（触发 GameThread 加载模型）</td></tr>
+      <tr><td><code>r.Lumen.ScreenProbeNSPF.Model</code></td><td>NNEModelData 资产路径</td></tr>
+      <tr><td><code>r.Lumen.ScreenProbeNSPF.Runtime</code></td><td>推理后端：<code>NNERuntimeORTDml</code>（快）/ <code>NNERuntimeRDGHlsl</code></td></tr>
+      <tr><td><code>r.Lumen.ScreenProbeNSPF.DebugScale</code></td><td><strong>诊断用</strong>：缩放 NN 输出，验证其是否影响画面（1=正常）</td></tr>
+      <tr><td><code>r.Lumen.ScreenProbeDump.*</code></td><td>采集相关（Enable / OutputDir / MaxFrames / WaitForMotion）</td></tr>
+    </table>
+
+    <h4>采集产出（每帧）</h4>
+    <pre>frame_%06d_in.npy       滤波前 radiance（网络输入）
+frame_%06d_gt.npy       滤波后 radiance（答案）
+frame_%06d_hitdist.npy  命中距离
+frame_%06d_depth.npy    probe 深度
+frame_%06d_normal.npy   法线
+frame_%06d_wpos.npy     世界坐标
+frame_%06d.json         相机矩阵（配对用）
+meta.json               全局配置（tracing/gather 分辨率等）</pre>
+  </section>
+
+  <!-- 3 -->
+  <section id="runtime">
+    <h3>3. ★ 引擎内实时链路（S4.2 核心）</h3>
+    <figure>
+      <svg viewBox="0 0 720 300" style="max-width:100%;height:auto">
+        <text x="15" y="22" font-size="13" font-weight="700">每帧在渲染线程执行的链路</text>
+        <!-- 输入 -->
+        <rect x="15" y="35" width="135" height="40" fill="#fee2e2" stroke="#dc2626" rx="5"/>
+        <text x="82" y="52" font-size="11" text-anchor="middle">Composited</text>
+        <text x="82" y="66" font-size="10" text-anchor="middle" fill="#5f6875">Radiance（滤波前）</text>
+        <text x="158" y="58" font-size="15">→</text>
+        <!-- 特征 -->
+        <rect x="172" y="35" width="120" height="40" fill="#dbeafe" stroke="#2563eb" rx="5"/>
+        <text x="232" y="52" font-size="11" text-anchor="middle">特征构建 CS</text>
+        <text x="232" y="66" font-size="10" text-anchor="middle" fill="#5f6875">52 维/样本</text>
+        <text x="300" y="58" font-size="15">→</text>
+        <rect x="314" y="35" width="95" height="40" fill="#e0e7ff" stroke="#4f46e5" rx="5"/>
+        <text x="361" y="58" font-size="11" text-anchor="middle">InputBuf</text>
+        <text x="417" y="58" font-size="15">→</text>
+        <!-- NNE -->
+        <rect x="431" y="35" width="120" height="40" fill="#dcfce7" stroke="#16a34a" rx="5"/>
+        <text x="491" y="52" font-size="11" text-anchor="middle">NNE EnqueueRDG</text>
+        <text x="491" y="66" font-size="10" text-anchor="middle" fill="#5f6875">DirectML ≈1ms</text>
+        <text x="559" y="58" font-size="15">→</text>
+        <rect x="573" y="35" width="95" height="40" fill="#e0e7ff" stroke="#4f46e5" rx="5"/>
+        <text x="620" y="58" font-size="11" text-anchor="middle">OutputBuf</text>
+        <text x="676" y="58" font-size="15">↓</text>
+        <!-- 写回 -->
+        <rect x="573" y="95" width="95" height="40" fill="#fef3c7" stroke="#d97706" rx="5"/>
+        <text x="620" y="118" font-size="11" text-anchor="middle">写回 CS</text>
+        <text x="660" y="115" font-size="15">←</text>
+        <text x="573" y="150" font-size="10" fill="#5f6875">expm1 + DebugScale</text>
+        <!-- NN radiance -->
+        <rect x="380" y="95" width="150" height="40" fill="#dcfce7" stroke="#16a34a" rx="5"/>
+        <text x="455" y="112" font-size="11" text-anchor="middle">NNRadiance</text>
+        <text x="455" y="126" font-size="10" text-anchor="middle" fill="#16a34a">覆盖 ScreenProbeRadiance</text>
+        <text x="372" y="115" font-size="15">←</text>
+        <!-- 关键：ConvertToSH 在替换之后 -->
+        <rect x="180" y="95" width="180" height="40" fill="#fee2e2" stroke="#dc2626" rx="5"/>
+        <text x="270" y="112" font-size="11" text-anchor="middle">ConvertToSH（用 NN 结果）</text>
+        <text x="270" y="126" font-size="10" text-anchor="middle" fill="#dc2626">SHAmbient / SHDirectional</text>
+        <text x="172" y="115" font-size="15">←</text>
+        <!-- gather -->
+        <rect x="180" y="160" width="180" height="40" fill="#e0e7ff" stroke="#4f46e5" rx="5"/>
+        <text x="270" y="177" font-size="11" text-anchor="middle">gather（消费 SH）</text>
+        <text x="270" y="191" font-size="10" text-anchor="middle" fill="#5f6875">→ 屏幕 GI</text>
+        <text x="168" y="180" font-size="15">←</text>
+        <rect x="15" y="160" width="145" height="40" fill="#dcfce7" stroke="#16a34a" rx="5"/>
+        <text x="87" y="185" font-size="12" text-anchor="middle">最终画面 GI ✓</text>
+        <!-- 关键提示 -->
+        <text x="15" y="235" font-size="12" fill="#dc2626">★ 关键：替换必须发生在 ConvertToSH 【之前】—— 否则 SH 仍由传统 radiance 编码，</text>
+        <text x="15" y="252" font-size="12" fill="#dc2626">　 NN 输出会被完全绕过（实测 DebugScale=0 画面无变化，见 LOG 第 9 节）。</text>
+        <text x="15" y="275" font-size="12" fill="#5f6875">链路说明：FilterScreenProbes → 传统滤波产出 ScreenProbeRadiance → 我们覆盖为 NN 结果 → ConvertToSH → gather</text>
+      </svg>
+      <figcaption>引擎内实时链路：特征构建 → NNE 推理 → 写回 → 覆盖 radiance → SH 编码 → 屏幕 GI</figcaption>
+    </figure>
+  </section>
+
+  <!-- 4 -->
+  <section id="python">
+    <h3>4. Python 侧目录</h3>
+    <pre>NeuralGI-Lumen/
+├── train/                   训练（模型 / 损失 / 主循环）
+│   ├── model.py             ProbeFilterMLP（4 层 MLP + 残差）
+│   ├── losses.py            relative L2（+ DarkPreserveLoss 实验项）
+│   └── train.py             训练主循环
+├── tools/
+│   ├── dataset/             ★ 数据加载与特征构建
+│   │   └── probe_dataset.py  52/56 维特征、相机矩阵配对
+│   ├── capture/             Sequencer 双次采集（方案 B）
+│   ├── verify/              配对校验 / 诊断脚本
+│   ├── eval/                规范化推理入口 + 可视化
+│   └── export_onnx.py       导出（ONNX / TensorRT / NNE 兼容）
+├── eval/                    平滑度评估
+├── experiments/
+│   ├── 01-失真修复/         E0~E4 实验记录
+│   └── 02-S4引擎接入/       S4.2 全流程 + 坑记录（★ 含第 9 节）
+├── runs/                    checkpoint（见 CHECKPOINTS.md 登记）
+└── docs/                    文档（本文件等）</pre>
+  </section>
+
+  <!-- 5 -->
+  <section id="scripts">
+    <h3>5. 脚本详解</h3>
+    <table>
+      <tr><th>脚本</th><th>用途</th></tr>
+      <tr><td><code>tools/capture/capture_b_pair.py</code></td><td>Sequencer 逐帧步进 + 双次采集（低/高射线），自动对齐起点</td></tr>
+      <tr><td><code>tools/dataset/probe_dataset.py</code></td><td><strong>最核心</strong>：52/56 维特征构建、时域重投影、相机矩阵配对</td></tr>
+      <tr><td><code>train/train.py</code></td><td>训练主循环（支持 <code>--gt-dir</code>、<code>--gt-use-in</code>、<code>--no-history</code> 等）</td></tr>
+      <tr><td><code>tools/verify/verify_b_pairing.py</code></td><td>方案 B 配对 6 项校验（帧数/相机/几何/射线数…）</td></tr>
+      <tr><td><code>tools/verify/diag_frame_offset.py</code></td><td>诊断两遍采集是否帧错位</td></tr>
+      <tr><td><code>tools/verify/pair_by_camera.py</code></td><td>用相机矩阵配对（解决密度不同导致的错位）</td></tr>
+      <tr><td><code>tools/eval/run_infer.py</code></td><td><strong>首选推理入口</strong>：枚举式 <code>--scheme A/B/B2</code> + <code>--scene train/new</code></td></tr>
+      <tr><td><code>tools/eval/visualize_b.py</code></td><td>生成「输入 / 模型输出 / GT」三连对比图</td></tr>
+      <tr><td><code>eval/eval_smoothness.py</code></td><td>平滑度、完成度、MSE/relL2 评估</td></tr>
+      <tr><td><code>tools/export_onnx.py</code></td><td>导出 ONNX（<code>--fixed-batch</code> / <code>--legacy</code> 供 NNE 用）</td></tr>
+      <tr><td><code>tools/build_engine.py</code> / <code>bench_trt.py</code></td><td>TensorRT engine 构建与测速（0.749 ms）</td></tr>
+    </table>
+  </section>
+
+  <!-- 6 -->
+  <section id="flow">
+    <h3>6. 完整数据流</h3>
+    <figure>
+      <svg viewBox="0 0 720 190" style="max-width:100%;height:auto">
+        <text x="15" y="20" font-size="13" font-weight="700">离线训练闭环</text>
+        <rect x="15" y="35" width="110" height="46" fill="#dbeafe" stroke="#2563eb" rx="5"/>
+        <text x="70" y="63" font-size="11" text-anchor="middle">引擎采集</text>
+        <text x="133" y="58" font-size="15">→</text>
+        <rect x="145" y="35" width="110" height="46" fill="#e0e7ff" stroke="#4f46e5" rx="5"/>
+        <text x="200" y="63" font-size="11" text-anchor="middle">npy 数据</text>
+        <text x="263" y="58" font-size="15">→</text>
+        <rect x="275" y="35" width="120" height="46" fill="#fef3c7" stroke="#d97706" rx="5"/>
+        <text x="335" y="56" font-size="11" text-anchor="middle">dataset</text>
+        <text x="335" y="70" font-size="10" text-anchor="middle" fill="#5f6875">52 维特征</text>
+        <text x="403" y="58" font-size="15">→</text>
+        <rect x="415" y="35" width="100" height="46" fill="#dcfce7" stroke="#16a34a" rx="5"/>
+        <text x="465" y="63" font-size="11" text-anchor="middle">train</text>
+        <text x="523" y="58" font-size="15">→</text>
+        <rect x="535" y="35" width="90" height="46" fill="#fff" stroke="#16a34a" rx="5"/>
+        <text x="580" y="63" font-size="11" text-anchor="middle">best.pt</text>
+        <text x="633" y="58" font-size="15">→</text>
+        <rect x="645" y="35" width="65" height="46" fill="#fee2e2" stroke="#dc2626" rx="5"/>
+        <text x="677" y="63" font-size="11" text-anchor="middle">onnx</text>
+        <!-- 回流 -->
+        <path d="M677,81 V120 H70 V81" stroke="#dc2626" stroke-width="2" fill="none"
+              stroke-dasharray="5,3" marker-end="url(#ar3)"/>
+        <text x="370" y="140" font-size="11" fill="#dc2626">模型回流到引擎，由 NNE 实时加载推理</text>
+        <text x="370" y="162" font-size="11" fill="#5f6875">评估（run_infer / eval_smoothness）与校验（verify_b_pairing）穿插在各环节之间</text>
+        <defs><marker id="ar3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="#dc2626"/></marker></defs>
+      </svg>
+      <figcaption>离线训练闭环 + 引擎内实时推理回路</figcaption>
+    </figure>
+  </section>
+
+  <!-- 7 -->
+  <section id="paths">
+    <h3>7. 三条通路与模型</h3>
+    <table>
+      <tr><th>通路</th><th>输入 → 答案</th><th>任务</th><th>模型</th></tr>
+      <tr><td><strong>A</strong></td><td>low.in → low.gt</td><td>纯滤波</td><td><code>runs/b_full</code>（56 维）</td></tr>
+      <tr><td><strong>B'</strong></td><td>low.in → <strong>high.gt</strong></td><td>滤波 + 补射线（<strong>部署主力</strong>）</td><td><code>runs/b_prime_real</code>（56）/ <code>b_nohist</code>（52，当前部署）</td></tr>
+      <tr><td><strong>B''</strong></td><td>low.in → <strong>high.in</strong></td><td>纯补射线</td><td><code>runs/b_rayonly</code>（56）</td></tr>
+    </table>
+    <div class="warn">
+      <strong>维度注意</strong>：带历史 = <code>in_dim 56</code>；<code>--no-history</code> = <code>in_dim 52</code>。部署时 shader 输出必须与模型维度一致（当前 52）。
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section id="progress">
+    <h3>8. 当前进度</h3>
+    <table>
+      <tr><th>阶段</th><th>内容</th><th>状态</th></tr>
+      <tr><td>S1</td><td>引擎侧采集（6 路 readback 写盘）</td><td>✅ 完成</td></tr>
+      <tr><td>S2</td><td>训练管道 + 三条通路 + ONNX/TensorRT</td><td>✅ 完成</td></tr>
+      <tr><td>S3</td><td>方案 B' 数据（双次采集 + 相机配对）</td><td>✅ 完成</td></tr>
+      <tr><td><strong>S4</strong></td><td><strong>引擎接入（NNE 实时推理）</strong></td><td>✅ <strong>完成（NN 输出驱动画面）</strong></td></tr>
+      <tr><td>—</td><td>画质优于传统滤波</td><td>⏳ 待评估 / 调优</td></tr>
+    </table>
+    <div class="ok">
+      <strong>S4.2 已打通</strong>：NN 输出真正进入最终画面（<code>DebugScale</code> 验证：0→GI 消失、50→GI 爆亮、1→恢复）。
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section id="constraint">
+    <h3>9. 重要约束与坑</h3>
+    <table>
+      <tr><th>约束 / 坑</th><th>说明与对策</th></tr>
+      <tr>
+        <td>★ <strong>替换时机</strong></td>
+        <td>必须在 <code>ConvertToSH</code> 前替换 radiance；下游消费的是 SH 而非原始 radiance（详见 LOG 第 9 节）</td>
+      </tr>
+      <tr><td>NNE 不支持 CPU 上传</td><td>官方 NNEDenoiser 只用 shader 写入 buffer → 照搬其三段式</td></tr>
+      <tr><td>LoadObject 崩溃</td><td>UObject 只能在 GameThread 创建 → 用 CVar 回调触发 GameThread 预加载</td></tr>
+      <tr><td>Trace 只有 8/16/32</td><td>"降射线省性能"不可行 → 转为画质提升路线</td></tr>
+      <tr><td>两遍采集帧号错位</td><td>用相机矩阵最近邻配对（匹配距离 0.00e+00）</td></tr>
+      <tr><td>NNE 无 TensorRT runtime</td><td>本地 5.6 没有；用 <code>NNERuntimeORTDml</code>（DirectML，≈1ms）</td></tr>
+      <tr><td>维度 52 / 56 易混</td><td>换模型时 shader stride 与 CVar 必须同步改</td></tr>
+      <tr><td>验证"是否生效"</td><td>用 <code>DebugScale</code>（0/50/1）做因果验证，不要只看日志</td></tr>
+    </table>
+  </section>
+
+  <!-- 10 -->
+  <section id="vcs">
+    <h3>10. 版本管理与文档</h3>
+    <div class="grid2">
+      <div class="box">
+        <strong>引擎侧（UE C++ / shader）</strong>
+        <p style="font-size:13.5px">版本管理：<strong>Perforce</strong><br>
+        CL <strong>107315</strong>（NSPF 接入 + 采集 + Build.cs + shader）</p>
+      </div>
+      <div class="box">
+        <strong>Python 侧 + 文档 + 模型</strong>
+        <p style="font-size:13.5px">版本管理：<strong>GitHub</strong><br>
+        <code>https://github.com/SidaJU/NeuralGI-Lumen</code></p>
+      </div>
+    </div>
+    <h4>相关文档</h4>
+    <table>
+      <tr><th>文档</th><th>内容</th></tr>
+      <tr><td><code>README.md</code></td><td>项目总览与动机</td></tr>
+      <tr><td><code>docs/S4-引擎接入技术方案.md</code></td><td>NNE 接入方案（官方范式调研）</td></tr>
+      <tr><td><code>docs/方案B-双次采集SOP.md</code></td><td>Sequencer 采集操作手册</td></tr>
+      <tr><td><code>docs/里程碑-流程跑通与结构固化.md</code></td><td>阶段成果与纪律</td></tr>
+      <tr><td><code>experiments/02-S4引擎接入/LOG.md</code></td><td>★ S4.2 实测数据与坑（含第 9 节关键坑）</td></tr>
+      <tr><td><code>runs/CHECKPOINTS.md</code></td><td>checkpoint 登记与命名规范</td></tr>
+      <tr><td><code>docs/Notes1~6、Lesson1</code></td><td>原理笔记（初始化 / 残差 / 损失 / ONNX / TRT / 训练流程）</td></tr>
+    </table>
+  </section>
+
+  <p style="text-align:center;color:var(--muted);font-size:13px;margin-top:26px">
+    项目结构与脚本说明 · NeuralGI-Lumen · 引擎侧走 P4（CL 107315），Python 侧走 GitHub
+  </p>
+</main>
+</div>
+</body>
+</html>
