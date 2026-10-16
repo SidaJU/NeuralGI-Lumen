@@ -37,22 +37,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-# 中文字体
-for _f in ("Microsoft YaHei", "SimHei", "DengXian", "SimSun"):
-    try:
-        matplotlib.font_manager.findfont(_f, fallback_to_default=False)
-        plt.rcParams["font.sans-serif"] = [_f]
-        break
-    except Exception:
-        continue
-plt.rcParams["axes.unicode_minus"] = False
-
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "tools" / "dataset"))
-sys.path.insert(0, str(ROOT / "train"))
+for p in ("tools", "tools/dataset", "train"):
+    if str(ROOT / p) not in sys.path:
+        sys.path.insert(0, str(ROOT / p))
 
 from probe_dataset import ProbeTexelDataset           # noqa: E402
 from model import ProbeFilterMLP                      # noqa: E402
+# tonemap / smoothness / 中文字体统一来自 nspf_common，避免各脚本各写一份
+from nspf_common import setup_matplotlib, tonemap, smoothness  # noqa: E402
+
+setup_matplotlib()
 
 
 # ======================================================================
@@ -110,23 +105,6 @@ MODELS: dict[str, str] = {
 # ======================================================================
 #  工具
 # ======================================================================
-
-def tonemap(x: np.ndarray) -> np.ndarray:
-    x = np.maximum(np.asarray(x, dtype=np.float32), 0.0)
-    hi = float(np.percentile(x, 99))
-    if hi <= 1e-8:
-        hi = float(x.max()) if x.max() > 1e-8 else 1.0
-    return np.clip(x / hi, 0.0, 1.0) ** (1.0 / 2.2)
-
-
-def smoothness(atlas: np.ndarray, g: int) -> float:
-    h, w = atlas.shape[:2]
-    ph, pw = h // g, w // g
-    p = atlas.reshape(ph, g, pw, g, -1).transpose(0, 2, 1, 3, 4)
-    d = np.abs(np.diff(p, axis=2)).mean()
-    m = np.abs(p).mean() + 1e-6
-    return float(d / m)
-
 
 def show_registry() -> None:
     print("=" * 70)

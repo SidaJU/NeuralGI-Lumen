@@ -1,29 +1,13 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-//
-// [theozhu++] NSPF S4.2: 构建神经网络输入特征 (56 维)
-//
-// 对照官方 NNEDenoiser 的 InputProcess: 用 compute shader 把纹理数据
-// 写进 NNE 的 input buffer (官方从不用 CPU 上传).
-//
-// 一个线程 = 一个 (probe, 方向格子) = atlas 的一个 texel = 一个样本.
-// 输出 56 维特征, 与 Python 侧 probe_dataset._build_features 对齐:
-//
-//   [0:27]   3x3 邻域 radiance (同方向, 跨 9 个 probe) -> 9*3
-//   [27:36]  3x3 邻域 hitdist                          -> 9
-//   [36:45]  3x3 邻域 valid                            -> 9
-//   [45:52]  几何: log深度(1) + 法线(3) + 相对坐标(3)   -> 7
-//   [52:55]  历史 radiance (重投影)                     -> 3   [第一版填 0]
-//   [55]     历史是否有效                                -> 1   [第一版填 0]
-//
-// 第一版: 历史通道留 0. 训练时 use_history=False, 模型这 4 维见到的就是 0,
-// 与训练分布一致 —— 见 tools/dataset/probe_dataset.py.
+// [theozhu++] NSPF S4.2: 构建网络输入特征（一个线程 = 一个 texel = 一个样本）
+// 特征布局对齐 probe_dataset._build_features：
+//   [0:27] 3x3 邻域 radiance | [27:36] hitdist | [36:45] valid
+//   [45:52] 几何(log深度/法线/相对坐标)
+// 当前 52 维（无历史）；启用历史需改 56 并填 [52:55]、[55]。
 // [theozhu--]
 
-// 与 Lumen 其他 shader 一致: Common.ush 在上一级目录 (Private/), 必须写 "../".
-// 直接写 "Common.ush" 会报 File 'Common.ush' not found.
-// 注: 刻意不 include LumenScreenProbeCommon.ush —— 本 shader 自带全部所需参数
-// (AtlasViewSize / ProbeViewSize / GatherResolution), 引入它反而会连带
-// ScreenProbeParameters uniform buffer 等额外依赖.
+// Common.ush 在上层目录，须写 "../"。不引入 LumenScreenProbeCommon.ush：
+// 本 shader 自带全部参数，引入会连带额外依赖。
 #include "../Common.ush"
 
 #define NSPF_THREAD_GROUP_SIZE 8

@@ -154,14 +154,9 @@ def main() -> int:
     print(f"  每帧采样 {args.samples_per_frame} texel, "
           f"历史={'关' if not use_history else args.history_mode}")
 
-    # 明确打印当前是哪个方案, 避免再出现"以为在跑 B 实际是 A"
-    if args.gt_dir:
-        scheme = "B''(纯射线提升, 答案=高射线未滤波)" if args.gt_use_in \
-            else "B'(滤波+射线, 答案=高射线已滤波)"
-        print(f"  方案: {scheme}")
-        print(f"  GT 目录: {args.gt_dir}")
-    else:
-        print("  方案: A(自配对, 答案=同目录已滤波)")
+    # 明确当前方案, 避免"以为在跑 B 实际是 A"
+    scheme = ("B''" if args.gt_use_in else "B'") if args.gt_dir else "A"
+    print(f"  方案: {scheme}")
 
     dl = DataLoader(ds, batch_size=1, shuffle=True,
                     num_workers=args.num_workers, pin_memory=(device == "cuda"))
@@ -193,11 +188,7 @@ def main() -> int:
     log_path = out_dir / "train_log.jsonl"
     history: list[dict] = []
 
-    print()
-    print("=" * 66)
-    print("开始训练")
-    print("=" * 66)
-
+    print(f"\n训练开始 ({args.epochs} epochs)")
     best = float("inf")
     t_start = time.time()
 
@@ -273,22 +264,9 @@ def main() -> int:
                 "epoch": args.epochs}, out_dir / "last.pt")
 
     total = time.time() - t_start
-    print()
-    print("=" * 66)
-    print(f"完成: {args.epochs} epochs, 用时 {total:.1f}s")
-    print(f"最佳 loss: {best:.6f}")
-    print(f"日志: {log_path}")
-    print(f"权重: {out_dir / 'best.pt'}")
-    print("=" * 66)
-
-    # 训练完给个提示: 下一步该看什么
-    print()
-    print("下一步:")
-    print(f"  1. 查看 loss 曲线是否下降: {log_path}")
-    print(f"  2. 跑对照实验确认各部件贡献:")
-    print(f"       python train/train.py --data {args.data} --no-history   # 去掉历史帧")
-    print(f"       python train/train.py --data {args.data} --loss mse     # 换 MSE")
-    print("  3. 评估输出平滑度是否优于 GT (见 README)")
+    print(f"\n完成: {args.epochs} epochs, 用时 {total:.1f}s, "
+          f"最佳 loss={best:.6f}")
+    print(f"权重: {out_dir / 'best.pt'}   日志: {log_path}")
 
     return 0
 

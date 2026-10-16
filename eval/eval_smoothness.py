@@ -25,20 +25,14 @@ import numpy as np
 import torch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "tools" / "dataset"))
-sys.path.insert(0, str(ROOT / "train"))
+for p in ("tools", "tools/dataset", "train"):
+    if str(ROOT / p) not in sys.path:
+        sys.path.insert(0, str(ROOT / p))
 
 from probe_dataset import ProbeSequence, ProbeTexelDataset  # noqa: E402
 from model import ProbeFilterMLP  # noqa: E402
-
-
-def smoothness(atlas: np.ndarray, g: int) -> float:
-    h, w = atlas.shape[:2]
-    ph, pw = h // g, w // g
-    p = atlas.reshape(ph, g, pw, g, -1).transpose(0, 2, 1, 3, 4)
-    d = np.abs(np.diff(p, axis=2)).mean()
-    m = np.abs(p).mean() + 1e-6
-    return float(d / m)
+# smoothness 统一来自 nspf_common（原先 4 个脚本各写一份）
+from nspf_common import smoothness  # noqa: E402
 
 
 def main() -> int:

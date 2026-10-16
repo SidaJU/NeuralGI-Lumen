@@ -303,20 +303,6 @@ FRDGTextureRef LumenScreenProbeNSPF::AddNSPFFilterPass(
 		return nullptr;
 	}
 
-	// 日志限流: 前 5 帧全打(建链初期), 之后每 300 帧打一次摘要
-	static uint32 GNSPFPassCount = 0;
-	const bool bVerbose = (GNSPFPassCount < 5) || (GNSPFPassCount % 300 == 0);
-	++GNSPFPassCount;
-	if (bVerbose)
-	{
-		UE_LOG(LogRenderer, Display,
-			TEXT("[theozhu] NSPF: ---- Pass #%u 开始 (atlas=%dx%d, 后端=%s) ----"),
-			GNSPFPassCount,
-			CompositedScreenProbeRadiance->Desc.Extent.X,
-			CompositedScreenProbeRadiance->Desc.Extent.Y,
-			*CVarLumenScreenProbeNSPFRuntime);
-	}
-
 	const FIntPoint AtlasSize = FIntPoint(
 		CompositedScreenProbeRadiance->Desc.Extent.X,
 		CompositedScreenProbeRadiance->Desc.Extent.Y);
@@ -360,12 +346,6 @@ FRDGTextureRef LumenScreenProbeNSPF::AddNSPFFilterPass(
 			return nullptr;
 		}
 		GCachedNumSamples = NumSamples;
-		if (bVerbose)
-		{
-			UE_LOG(LogRenderer, Display,
-				TEXT("[theozhu] NSPF:   [step] SetInputTensorShapes OK (%ux%u)"),
-				NumSamples, NSPF_IN_DIM);
-		}
 	}
 
 	// ---- 1) 创建 typed buffer (照搬官方: + EBufferUsageFlags::NNE) ----
@@ -415,13 +395,6 @@ FRDGTextureRef LumenScreenProbeNSPF::AddNSPFFilterPass(
 			FComputeShaderUtils::GetGroupCount(
 				FIntVector(AtlasSize.X, AtlasSize.Y, 1), NSPF_GROUP_SIZE));
 	}
-	if (bVerbose)
-	{
-		UE_LOG(LogRenderer, Display,
-			TEXT("[theozhu] NSPF:   [step] 特征构建 pass 已入队 (in=%u floats, out=%u floats)"),
-			NumSamples * NSPF_IN_DIM, NumSamples * NSPF_OUT_DIM);
-	}
-
 	// ---- 3) NNE 推理 ----
 	{
 		TArray<UE::NNE::FTensorBindingRDG> Inputs;
@@ -445,11 +418,6 @@ FRDGTextureRef LumenScreenProbeNSPF::AddNSPFFilterPass(
 					(int32)Status, C);
 			}
 			return nullptr;
-		}
-		if (bVerbose)
-		{
-			UE_LOG(LogRenderer, Display,
-				TEXT("[theozhu] NSPF:   [step] EnqueueRDG OK (NNE 推理已入队)"));
 		}
 	}
 
@@ -479,17 +447,8 @@ FRDGTextureRef LumenScreenProbeNSPF::AddNSPFFilterPass(
 			FComputeShaderUtils::GetGroupCount(
 				FIntVector(AtlasSize.X, AtlasSize.Y, 1), NSPF_GROUP_SIZE));
 	}
-	if (bVerbose)
-	{
-		UE_LOG(LogRenderer, Display,
-			TEXT("[theozhu] NSPF:   [step] 写回 pass 已入队 (DebugScale=%.2f)"),
-			CVarLumenScreenProbeNSPFDebugScale);
-	}
-
-	// ★ 诊断日志: 只打一次.
-	//   之前只在【失败】时打 warning, 成功时静默 —— 导致无法从日志区分
-	//   "NN 没执行(返回nullptr走传统滤波)" 和 "NN 执行了但结果接近".
-	//   有了这行, 只要看到它就证明 NN 输出确实被赋给了 GatherParameters.
+	// 首次应用提示（只打一次）：确认 NN 输出确实进入管线，
+	// 否则无法区分"没执行走传统滤波"与"执行了但结果接近"。
 	static bool bNSPFLoggedOnce = false;
 	if (!bNSPFLoggedOnce)
 	{

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notes7：log 域训练与 Jensen 偏差（偏暗根因）</title>
+<style>
+  :root{
+    --bg:#f6f7f9;--card:#fff;--ink:#1b1f27;--muted:#5f6875;--line:#e4e7ec;
+    --blue:#2563eb;--cyan:#0891b2;--orange:#d97706;--green:#16a34a;
+    --red:#dc2626;--purple:#7c3aed;--code:#f1f3f6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+    line-height:1.8;font-size:15.5px}
+  .layout{display:flex;min-height:100vh}
+  nav{width:250px;flex:0 0 250px;background:var(--card);border-right:1px solid var(--line);
+    padding:24px 0;position:sticky;top:0;height:100vh;overflow-y:auto}
+  nav h2{font-size:12px;color:var(--muted);margin:0 0 12px 20px;letter-spacing:.1em}
+  nav a{display:block;padding:8px 20px;color:var(--ink);text-decoration:none;
+    font-size:14px;border-left:3px solid transparent}
+  nav a:hover{background:#eef2f7;border-left-color:var(--blue)}
+  main{flex:1;padding:34px 44px;max-width:1040px}
+  h1{font-size:27px;margin:0 0 4px}
+  .sub{color:var(--muted);margin-bottom:26px;font-size:14px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:26px 30px;margin-bottom:22px}
+  h3{margin:0 0 14px;font-size:21px;padding-bottom:10px;border-bottom:2px solid var(--line)}
+  h4{margin:20px 0 8px;font-size:16.5px;color:var(--blue)}
+  p{margin:10px 0}
+  code{background:var(--code);padding:2px 6px;border-radius:4px;
+    font-family:Consolas,monospace;font-size:13.5px}
+  pre{background:var(--code);padding:14px 16px;border-radius:8px;overflow-x:auto;
+    font-family:Consolas,monospace;font-size:12.5px;line-height:1.6;
+    border-left:3px solid var(--blue)}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:9px 12px;text-align:left}
+  th{background:#eef2f7}
+  .key{background:#eff6ff;border-left:4px solid var(--blue);padding:12px 16px;
+    border-radius:6px;margin:14px 0}
+  .warn{background:#fffbeb;border-left:4px solid var(--orange);padding:12px 16px;
+    border-radius:6px;margin:14px 0}
+  .danger{background:#fef2f2;border-left:4px solid var(--red);padding:12px 16px;
+    border-radius:6px;margin:14px 0}
+  figure{margin:20px 0;text-align:center}
+  figcaption{font-size:13px;color:var(--muted);margin-top:8px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .box{border:1px solid var(--line);border-radius:8px;padding:14px}
+  .step{display:flex;align-items:center;gap:10px;margin:10px 0;padding:10px 14px;
+    background:#f8fafc;border-left:4px solid var(--cyan);border-radius:6px}
+  .step b{color:var(--cyan)}
+  @media(max-width:900px){
+    .layout{flex-direction:column}nav{width:100%;height:auto;position:static}
+    main{padding:18px}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav>
+  <h2>Notes 7</h2>
+  <a href="#what">1. Jensen 是什么</a>
+  <a href="#geo">2. 几何图解</a>
+  <a href="#why">3. 为什么会这样</a>
+  <a href="#pipeline">4. 我们的完整链路</a>
+  <a href="#code">5. ★ 代码位置逐条对照</a>
+  <a href="#howmuch">6. 偏了多少（数学）</a>
+  <a href="#fix">7. 修复方案</a>
+</nav>
+
+<main>
+  <h1>Notes 7：log 域训练与 Jensen 偏差</h1>
+  <p class="sub">为什么 NN 输出的 GI 会系统性偏暗？—— 从数学原理到项目每一行代码</p>
+
+  <!-- 1 -->
+  <section id="what">
+    <h3>1. Jensen 不等式是什么</h3>
+    <p><strong>一句话</strong>：对"向上弯"的（凸）函数，<strong>先平均再算函数 ≤ 先算函数再平均</strong>。</p>
+
+    <h4>最简数字例子（凸函数 x²）</h4>
+    <table>
+      <tr><th>做法</th><th>计算</th><th>结果</th></tr>
+      <tr><td><strong>先平均，再算函数</strong></td><td>1 和 3 平均 = 2，然后 2²</td><td><strong>4</strong></td></tr>
+      <tr><td><strong>先算函数，再平均</strong></td><td>1²=1，3²=9，再平均 (1+9)/2</td><td><strong>5</strong></td></tr>
+    </table>
+    <div class="key">
+      <code>f(平均值) = 4</code> &nbsp;≤&nbsp; <code>平均值(f) = 5</code><br>
+      <strong>先平均再算，结果更小。</strong>
+    </div>
+
+    <h4>生活类比：奖金</h4>
+    <p>奖金 ∝ 业绩²（凸函数）。业绩波动越大（1 和 3 vs 都是 2），"先算再平均"比"先平均再算"多得多。</p>
+    <table>
+      <tr><th>业绩</th><th>先平均再算</th><th>先算再平均</th><th>差</th></tr>
+      <tr><td>1 和 3（波动大）</td><td>2² = <strong>4</strong></td><td>(1+9)/2 = <strong>5</strong></td><td><strong>1</strong></td></tr>
+      <tr><td>2 和 2（无波动）</td><td>2² = <strong>4</strong></td><td>(4+4)/2 = <strong>4</strong></td><td><strong>0</strong></td></tr>
+    </table>
+    <p><strong>关键：波动（方差）越大，差距越大；没有波动就完全相等。</strong></p>
+  </section>
+
+  <!-- 2 -->
+  <section id="geo">
+    <h3>2. 几何图解（为什么曲线在中点更低）</h3>
+    <figure>
+      <svg viewBox="0 0 660 300" style="max-width:100%;height:auto">
+        <!-- 坐标轴 -->
+        <line x1="60" y1="250" x2="600" y2="250" stroke="#94a3b8" stroke-width="2"/>
+        <line x1="60" y1="250" x2="60" y2="30" stroke="#94a3b8" stroke-width="2"/>
+        <text x="610" y="255" font-size="12">x</text>
+        <text x="40" y="40" font-size="12">y = x²</text>
+
+        <!-- 抛物线 y=x^2，映射：X=60+ (x)*60, Y=250 - (x^2)*12 -->
+        <!-- 点: x=1 -> X=120, Y=250-12=238 ; x=2 -> X=180, Y=250-48=202 ; x=3 -> X=240, Y=250-108=142 -->
+        <path d="M60,250 Q120,238 180,202 Q240,142 300,58" stroke="#2563eb" stroke-width="3" fill="none"/>
+        <!-- 其实用更准确的点画 -->
+        <path d="M120,238 L150,220 L180,202 L210,180 L240,142" stroke="#2563eb" stroke-width="3" fill="none"/>
+
+        <!-- 点A(1,1) -->
+        <circle cx="120" cy="238" r="5" fill="#dc2626"/>
+        <text x="105" y="258" font-size="12" fill="#dc2626">A(1, 1)</text>
+        <!-- 点B(3,9) -->
+        <circle cx="240" cy="142" r="5" fill="#dc2626"/>
+        <text x="245" y="140" font-size="12" fill="#dc2626">B(3, 9)</text>
+
+        <!-- 弦 A-B -->
+        <line x1="120" y1="238" x2="240" y2="142" stroke="#d97706" stroke-width="2.5" stroke-dasharray="6,4"/>
+        <text x="255" y="185" font-size="11" fill="#d97706">弦（连线）在曲线【上方】</text>
+
+        <!-- 中点 x=2 -> X=180 -->
+        <!-- 弦上的中点值 = (1+9)/2=5 -> Y=250-5*12=190 -->
+        <circle cx="180" cy="190" r="5" fill="#d97706"/>
+        <text x="188" y="188" font-size="11" fill="#d97706">弦中点 = 5  ← "先算再平均"</text>
+        <!-- 曲线上的值 = 2^2=4 -> Y=250-4*12=202 -->
+        <circle cx="180" cy="202" r="5" fill="#16a34a"/>
+        <text x="60" y="222" font-size="11" fill="#16a34a">曲线点 = 4  ← "先平均再算"（更低）</text>
+
+        <!-- 竖虚线 -->
+        <line x1="180" y1="250" x2="180" y2="180" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="3,3"/>
+
+        <text x="80" y="285" font-size="12">曲线中点（绿，4）低于弦中点（橙，5）—— 这个"低"就是 Jensen 偏差</text>
+      </svg>
+      <figcaption>凸函数的弦在曲线上方 → 曲线中点更低 → "先平均再算"的结果更小</figcaption>
+    </figure>
+  </section>
+
+  <!-- 3 -->
+  <section id="why">
+    <h3>3. 为什么会这样：凸函数"放大差距"</h3>
+    <div class="key">
+      1 离平均 2 差 −1 → 1²=1（比 4 <strong>少 3</strong>）<br>
+      3 离平均 2 差 +1 → 3²=9（比 4 <strong>多 5</strong>）<br>
+      <strong>大的一侧多赚 5，小的一侧只亏 3 —— 不对称 → 平均后偏大</strong>
+    </div>
+    <p>凸函数的本质：<strong>离平均越远的大值，被放大得越厉害</strong>，所以"先算函数再平均"更大。</p>
+  </section>
+
+  <!-- 4 -->
+  <section id="pipeline">
+    <h3>4. 我们在项目里的完整链路</h3>
+    <figure>
+      <svg viewBox="0 0 700 250" style="max-width:100%;height:auto">
+        <text x="15" y="22" font-size="13" font-weight="700">数据形态变化的 4 步（注意在哪一步"取了平均"）</text>
+
+        <!-- 1 线性 -->
+        <rect x="15" y="40" width="140" height="50" fill="#fee2e2" stroke="#dc2626" rx="5"/>
+        <text x="85" y="60" font-size="11" text-anchor="middle">① 真实 radiance</text>
+        <text x="85" y="78" font-size="10" text-anchor="middle" fill="#5f6875">线性 HDR 0.001~15</text>
+        <text x="163" y="68" font-size="15">→</text>
+
+        <!-- 2 log1p -->
+        <rect x="175" y="40" width="130" height="50" fill="#fef3c7" stroke="#d97706" rx="5"/>
+        <text x="240" y="60" font-size="11" text-anchor="middle">② log1p 压缩</text>
+        <text x="240" y="78" font-size="10" text-anchor="middle" fill="#5f6875">O(1) 范围</text>
+        <text x="313" y="68" font-size="15">→</text>
+
+        <!-- 3 网络 -->
+        <rect x="325" y="40" width="130" height="50" fill="#dbeafe" stroke="#2563eb" rx="5"/>
+        <text x="390" y="60" font-size="11" text-anchor="middle">③ 网络学习</text>
+        <text x="390" y="78" font-size="10" text-anchor="middle" fill="#5f6875">输出 = log 域均值</text>
+        <text x="463" y="68" font-size="15">→</text>
+
+        <!-- 4 expm1 -->
+        <rect x="475" y="40" width="130" height="50" fill="#dcfce7" stroke="#16a34a" rx="5"/>
+        <text x="540" y="60" font-size="11" text-anchor="middle">④ expm1 还原</text>
+        <text x="540" y="78" font-size="10" text-anchor="middle" fill="#dc2626">← 结果【偏暗】</text>
+
+        <!-- Jensen 标注 -->
+        <text x="15" y="125" font-size="12" fill="#dc2626">★ Jensen 就发生在 ③→④：</text>
+        <text x="15" y="145" font-size="12">· ③ 网络学的是 <tspan font-family="monospace">E[ log1p(X) ]</tspan>（<strong>log 域的平均</strong>）</text>
+        <text x="15" y="163" font-size="12">· ④ 用 <tspan font-family="monospace">expm1</tspan> 还原 = "先平均再算函数"</text>
+        <text x="15" y="181" font-size="12">· 而真实亮度是 <tspan font-family="monospace">E[X]</tspan> = "先算函数再平均"</text>
+        <text x="15" y="205" font-size="13" fill="#dc2626">→ 前者 ≤ 后者 → 输出系统性小于真实值 → 偏暗</text>
+        <text x="15" y="230" font-size="12" fill="#5f6875">（GI radiance 波动极大：暗 0.001 / 亮 10+ → 偏差特别明显）</text>
+      </svg>
+      <figcaption>关键：网络在 log 域取了"平均"，而 exp 是凸函数 → 还原后必然偏小</figcaption>
+    </figure>
+  </section>
+
+  <!-- 5 -->
+  <section id="code">
+    <h3>5. ★ 代码位置逐条对照</h3>
+
+    <h4>① 编码端：把线性 radiance 压到 log 域</h4>
+    <p><strong>定义</strong> —— <code>tools/dataset/probe_dataset.py:65-71</code></p>
+    <pre>def log_normalize(x: np.ndarray) -> np.ndarray:
+    """HDR radiance -> O(1) 范围."""
+    return np.log1p(np.maximum(x, 0.0)).astype(np.float32)</pre>
+
+    <table>
+      <tr><th>调用位置</th><th>代码</th><th>作用</th></tr>
+      <tr><td><code>probe_dataset.py:514</code></td><td><code>target = log_normalize(cur["gt"])</code></td><td><strong>训练目标</strong> → log 域（网络要拟合的就是它）</td></tr>
+      <tr><td><code>probe_dataset.py:517</code></td><td><code>r_in = log_normalize(cur["in"])</code></td><td>特征 [0:27] 邻域 radiance → log 域</td></tr>
+      <tr><td><code>probe_dataset.py:567</code></td><td><code>log_normalize(hist)</code></td><td>历史 radiance → log 域</td></tr>
+      <tr><td><code>probe_dataset.py:651</code></td><td><code>gt_target = log_normalize(gt_frame[key])</code></td><td>方案 B 的 GT → log 域</td></tr>
+    </table>
+
+    <div class="warn">
+      <strong>注意</strong>：磁盘上的 <code>.npy</code> 文件里存的是<strong>原始线性 HDR</strong>，log1p 是<strong>加载时动态转换</strong>的（在 dataset 里），文件本身没被改。
+    </div>
+
+    <h4>② 模型输出：也在 log 域（残差也在 log 域）</h4>
+    <p><code>train/model.py:83-95</code>（<code>forward</code>）</p>
+    <pre>def forward(self, x: torch.Tensor) -> torch.Tensor:
+    out = self.net(x)
+    if self.use_residual:
+        # 通道 [12:15] 是中心 probe 的 log1p(radiance)，即"未滤波的输入"
+        center = x[:, 12:15]          # ← 因为特征已是 log 域，center 也是 log 域
+        out = center + out            # ← 输出仍是 log 域
+    return out</pre>
+    <div class="key">
+      <strong>所以模型输出是 log 域的值</strong>（不是一个"线性颜色"）。这一点是理解偏暗的关键。
+    </div>
+
+    <h4>③ 损失：在 log 域计算</h4>
+    <p><code>train/losses.py</code>（RelativeL2Loss）—— 分子是 <code>(pred − gt)²</code>，而 pred / gt 都已经是 log1p 之后的值（见 losses.py 注释第 6-7 行：值域已 log1p 压到 O(1)）。</p>
+
+    <h4>④ ★ 推理还原（把 log 域变回线性）—— 四处</h4>
+    <table>
+      <tr><th>位置</th><th>代码</th><th>场景</th></tr>
+      <tr><td><code>eval/eval_smoothness.py:124</code></td><td><code>out_lin = np.expm1(out)</code></td><td>平滑度评估</td></tr>
+      <tr><td><code>tools/eval/visualize_b.py:129</code></td><td><code>out_lin = np.expm1(out)</code></td><td>三连对比图</td></tr>
+      <tr><td><code>tools/eval/run_infer.py:209</code></td><td><code>out_lin = np.expm1(out)</code></td><td>规范化推理入口</td></tr>
+      <tr><td><code>tools/infer.py:76</code></td><td><code>"out": np.expm1(np.clip(out, -20, 20))</code></td><td>单帧推理</td></tr>
+      <tr style="background:#fff7ed"><td><strong><code>engine/Shaders/Private/Lumen/NSPFWriteBack.usf:48</code></strong></td><td><code>max(exp(LogOut) - 1.0, 0.0)</code></td><td><strong>引擎内实时（画面偏暗的直接出处）</strong></td></tr>
+    </table>
+
+    <div class="danger">
+      <strong>引擎里的那一行（NSPFWriteBack.usf:48）</strong>就是你看到"GI 偏暗"的地方：
+      <pre>const float3 Radiance = max(exp(LogOut) - 1.0, 0.0);   // 等价于 expm1</pre>
+      HLSL 没有 <code>expm1</code>，所以用 <code>exp(x) - 1</code> 实现 —— 数学上一样，Jensen 偏差也一模一样。
+    </div>
+
+    <h4>⑤ 附：引擎侧特征构建也做了 log</h4>
+    <p><code>NSPFFeatureBuild.usf:105-107</code></p>
+    <pre>// Python 侧 r_in = log_normalize(cur["in"]) —— 即 log1p
+Radiance = log(1.0 + max(CompositedRadianceTexture.Load(...), 0.0));</pre>
+    <p>（特征里的 radiance 必须填 log 域，否则与训练时的分布不一致 —— 这一点之前修过。）</p>
+  </section>
+
+  <!-- 6 -->
+  <section id="howmuch">
+    <h3>6. 偏了多少？（数学：lognormal 修正）</h3>
+    <p>数学上有现成结论：如果 <code>log(X)</code> 的均值 = μ、方差 = σ²，那么</p>
+    <div class="key">
+      真实期望亮度 <code>E[X] = exp(μ + σ²/2)</code><br>
+      而我们输出的是 <code>exp(μ)</code><br>
+      <strong>→ 少乘了 <code>exp(σ²/2)</code> 这个因子</strong>
+    </div>
+    <table>
+      <tr><th>σ²（log 域波动）</th><th>偏暗因子 exp(σ²/2)</th><th>相当于亮度只剩</th></tr>
+      <tr><td>0（无波动）</td><td>1.0</td><td>100%（不偏）</td></tr>
+      <tr><td>0.5</td><td>1.28</td><td>78%</td></tr>
+      <tr><td>1.0</td><td>1.65</td><td>61%</td></tr>
+      <tr><td>2.0</td><td>2.72</td><td>37%</td></tr>
+    </table>
+    <p><strong>GI radiance 波动很大</strong>（暗 0.001 / 亮 10+，log 域跨好几倍）→ σ² 不小 → 偏暗可观。</p>
+  </section>
+
+  <!-- 7 -->
+  <section id="fix">
+    <h3>7. 修复方案（先测量，再动手）</h3>
+
+    <h4>第 1 步：定量测量"暗了多少"</h4>
+    <pre>ratio = mean(pred_lin) / mean(gt_lin)      # 线性域均值比
+med   = median(pred_lin / (gt_lin + 1e-6))  # 逐 texel 比值中位数</pre>
+    <table>
+      <tr><th>结果</th><th>结论</th></tr>
+      <tr><td>ratio ≈ 0.7~0.9（或中位数明显 &lt; 1）</td><td>✅ Jensen 偏差坐实</td></tr>
+      <tr><td>ratio ≈ 1.0</td><td>偏暗另有原因（GT 本身暗 / 欠拟合 / 无历史）</td></tr>
+    </table>
+
+    <h4>第 2 步：三条修复路径</h4>
+    <div class="grid2">
+      <div class="box">
+        <strong>① 全局常数（最快）</strong>
+        <p style="font-size:13.5px">输出改为 <code>exp(LogOut + K) - 1</code>，K 先试 0.2~0.5，看画面。<br>
+        需要同步改 Python 三处 + shader。</p>
+      </div>
+      <div class="box">
+        <strong>② lognormal 修正（推荐）</strong>
+        <p style="font-size:13.5px">输出 <code>exp(μ + σ²/2) - 1</code>。<br>
+        σ² 可用全局估计，或让网络多预测一个方差头。</p>
+      </div>
+    </div>
+    <div class="box" style="margin-top:14px">
+      <strong>③ 线性域训练（最严谨，但代价大）</strong>
+      <p style="font-size:13.5px">去掉 log1p，直接在线性 radiance 上算 relative L2。<br>
+      <strong>代价</strong>：动态范围回到 0.001~15，训练稳定性变差 —— 这正是当初引入 log1p 的原因。</p>
+    </div>
+
+    <div class="warn">
+      <strong>改动要同步</strong>：引擎 shader（<code>NSPFWriteBack.usf:48</code>）与 Python 侧三处（<code>eval_smoothness</code> / <code>visualize_b</code> / <code>run_infer</code>）必须一起改，否则离线评估和引擎画面会对不上。
+    </div>
+  </section>
+
+  <p style="text-align:center;color:var(--muted);font-size:13px;margin-top:26px">
+    Notes 7 · log 域训练与 Jensen 偏差 · 涉及 probe_dataset.py / model.py / losses.py / 四处推理还原 / 引擎 shader
+  </p>
+</main>
+</div>
+</body>
+</html>

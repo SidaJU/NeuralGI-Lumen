@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notes8：长尾分布与 HDR 应对措施</title>
+<style>
+  :root{
+    --bg:#f6f7f9;--card:#fff;--ink:#1b1f27;--muted:#5f6875;--line:#e4e7ec;
+    --blue:#2563eb;--cyan:#0891b2;--orange:#d97706;--green:#16a34a;
+    --red:#dc2626;--purple:#7c3aed;--code:#f1f3f6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+    line-height:1.8;font-size:15.5px}
+  .layout{display:flex;min-height:100vh}
+  nav{width:250px;flex:0 0 250px;background:var(--card);border-right:1px solid var(--line);
+    padding:24px 0;position:sticky;top:0;height:100vh;overflow-y:auto}
+  nav h2{font-size:12px;color:var(--muted);margin:0 0 12px 20px;letter-spacing:.1em}
+  nav a{display:block;padding:8px 20px;color:var(--ink);text-decoration:none;
+    font-size:14px;border-left:3px solid transparent}
+  nav a:hover{background:#eef2f7;border-left-color:var(--blue)}
+  main{flex:1;padding:34px 44px;max-width:1040px}
+  h1{font-size:27px;margin:0 0 4px}
+  .sub{color:var(--muted);margin-bottom:26px;font-size:14px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:26px 30px;margin-bottom:22px}
+  h3{margin:0 0 14px;font-size:21px;padding-bottom:10px;border-bottom:2px solid var(--line)}
+  h4{margin:20px 0 8px;font-size:16.5px;color:var(--blue)}
+  p{margin:10px 0}
+  code{background:var(--code);padding:2px 6px;border-radius:4px;
+    font-family:Consolas,monospace;font-size:13.5px}
+  pre{background:var(--code);padding:14px 16px;border-radius:8px;overflow-x:auto;
+    font-family:Consolas,monospace;font-size:12.5px;line-height:1.6;
+    border-left:3px solid var(--blue)}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:9px 12px;text-align:left}
+  th{background:#eef2f7}
+  .key{background:#eff6ff;border-left:4px solid var(--blue);padding:12px 16px;
+    border-radius:6px;margin:14px 0}
+  .warn{background:#fffbeb;border-left:4px solid var(--orange);padding:12px 16px;
+    border-radius:6px;margin:14px 0}
+  .danger{background:#fef2f2;border-left:4px solid var(--red);padding:12px 16px;
+    border-radius:6px;margin:14px 0}
+  .ok{background:#f0fdf4;border-left:4px solid var(--green);padding:12px 16px;
+    border-radius:6px;margin:14px 0}
+  figure{margin:20px 0;text-align:center}
+  figcaption{font-size:13px;color:var(--muted);margin-top:8px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .box{border:1px solid var(--line);border-radius:8px;padding:14px}
+  @media(max-width:900px){
+    .layout{flex-direction:column}nav{width:100%;height:auto;position:static}
+    main{padding:18px}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav>
+  <h2>Notes 8</h2>
+  <a href="#what">1. 长尾是什么</a>
+  <a href="#harm">2. 危害（29.5万倍）</a>
+  <a href="#fix1">3. 措施① log1p</a>
+  <a href="#fix2">4. 措施② relative L2</a>
+  <a href="#fix3">5. 措施③ eps 选型</a>
+  <a href="#result">6. ★ 效果数据（诚实版）</a>
+  <a href="#todo">7. 如何补对照实验</a>
+</nav>
+
+<main>
+  <h1>Notes 8：长尾分布与 HDR 应对</h1>
+  <p class="sub">probe radiance 的长尾问题 —— 从现象、危害到三层措施（含代码如下落）</p>
+
+  <!-- 1 -->
+  <section id="what">
+    <h3>1. 长尾是什么（对什么数据的判断）</h3>
+    <p>判断对象：<strong>probe radiance</strong>（屏幕探针的辐射亮度，HDR 线性值）。</p>
+
+    <p>实测统计（<code>probe_dataset.py:68</code> / <code>losses.py:5-6</code>）：</p>
+    <table>
+      <tr><th>分位</th><th>值</th><th>含义</th></tr>
+      <tr><td><strong>p50（中位数）</strong></td><td><strong>0.029</strong></td><td>一半的格子亮度 ≤ 0.029（很暗）</td></tr>
+      <tr><td>p99</td><td>2.6</td><td>只有 1% 的格子 &gt; 2.6</td></tr>
+      <tr><td><strong>max</strong></td><td><strong>15.75</strong></td><td>最亮格子是中位数的 <strong>543 倍</strong></td></tr>
+    </table>
+
+    <figure>
+      <svg viewBox="0 0 660 250" style="max-width:100%;height:auto">
+        <line x1="50" y1="200" x2="620" y2="200" stroke="#94a3b8" stroke-width="2"/>
+        <text x="580" y="222" font-size="12">radiance →</text>
+        <text x="20" y="40" font-size="12">样本数</text>
+        <!-- 主体（暗部集中） -->
+        <rect x="55" y="95" width="26" height="105" fill="#2563eb"/>
+        <rect x="85" y="120" width="22" height="80" fill="#2563eb"/>
+        <rect x="110" y="150" width="18" height="50" fill="#2563eb"/>
+        <rect x="132" y="168" width="14" height="32" fill="#2563eb"/>
+        <rect x="150" y="182" width="12" height="18" fill="#2563eb"/>
+        <!-- 长尾 -->
+        <rect x="166" y="192" width="10" height="8" fill="#dc2626"/>
+        <rect x="180" y="194" width="10" height="6" fill="#dc2626"/>
+        <rect x="194" y="195" width="10" height="5" fill="#dc2626"/>
+        <rect x="208" y="196" width="10" height="4" fill="#dc2626"/>
+        <rect x="222" y="197" width="10" height="3" fill="#dc2626"/>
+        <rect x="236" y="197.5" width="10" height="2.5" fill="#dc2626"/>
+        <rect x="250" y="198" width="10" height="2" fill="#dc2626"/>
+        <rect x="264" y="198.5" width="10" height="1.5" fill="#dc2626"/>
+        <rect x="278" y="199" width="10" height="1" fill="#dc2626"/>
+        <rect x="292" y="199.3" width="10" height="0.7" fill="#dc2626"/>
+        <!-- 标注 -->
+        <text x="55" y="88" font-size="11" fill="#2563eb">绝大多数（暗部）</text>
+        <text x="150" y="88" font-size="11" fill="#dc2626">← 长尾（极少但极亮）</text>
+        <text x="300" y="215" font-size="11" fill="#5f6875">0.029</text>
+        <text x="430" y="215" font-size="11" fill="#5f6875">2.6 (p99)</text>
+        <text x="575" y="215" font-size="11" fill="#5f6875">15.75</text>
+        <text x="300" y="235" font-size="11" fill="#dc2626">↑ 右边这条又细又长的尾巴 = 长尾（右偏分布）</text>
+      </svg>
+      <figcaption>长尾分布：多数样本集中在小值区，少数样本值极大，拖出一条长尾</figcaption>
+    </figure>
+
+    <div class="key">
+      <strong>生活类比</strong>：社会收入 —— 大部分人收入普通，极少数富豪收入极高，把分布右边拉出长尾。
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section id="harm">
+    <h3>2. 危害：为什么长尾 + MSE 会毁掉训练</h3>
+    <p>MSE 用<strong>平方误差</strong>，量级差异会被平方放大：</p>
+    <table>
+      <tr><th>样本</th><th>radiance</th><th>平方误差（∝自身²）</th></tr>
+      <tr><td>暗部（p50）</td><td>0.029</td><td>≈ <strong>0.00084</strong></td></tr>
+      <tr><td>亮部（max）</td><td>15.75</td><td>≈ <strong>248</strong></td></tr>
+    </table>
+    <div class="danger">
+      <strong>248 / 0.00084 ≈ 29.5 万倍</strong><br>
+      → 亮部一个样本的误差，顶暗部 29.5 万个样本。<br>
+      → <code>losses.py:7-8</code> 原话：<em>"亮部样本虽然只占 1%，但其平方误差会主导整个 loss，导致网络只顾拟合亮部、暗部全部学废。"</em>
+    </div>
+    <p><strong>后果</strong>：GI 的主要价值是照亮暗部，但网络把全部容量拿去伺候那 1% 的亮部 → 暗部/中间调全学不好。</p>
+  </section>
+
+  <!-- 3 -->
+  <section id="fix1">
+    <h3>3. 措施①：<code>log1p</code> 压缩动态范围</h3>
+    <p><code>probe_dataset.py:65-71</code></p>
+    <pre>def log_normalize(x):
+    return np.log1p(np.maximum(x, 0.0)).astype(np.float32)</pre>
+
+    <figure>
+      <svg viewBox="0 0 660 180" style="max-width:100%;height:auto">
+        <text x="15" y="20" font-size="12" font-weight="700">压缩效果（真实数据）</text>
+        <!-- 线性 -->
+        <text x="15" y="50" font-size="12">线性域</text>
+        <rect x="80" y="38" width="40" height="18" fill="#2563eb"/>
+        <text x="130" y="52" font-size="11">暗部 0.029</text>
+        <rect x="230" y="38" width="380" height="18" fill="#dc2626"/>
+        <text x="620" y="52" font-size="11">亮部 15.75</text>
+        <text x="360" y="72" font-size="11" fill="#5f6875">跨度 543 倍</text>
+        <!-- log1p -->
+        <text x="15" y="105" font-size="12">log1p 后</text>
+        <rect x="80" y="93" width="35" height="18" fill="#2563eb"/>
+        <text x="130" y="107" font-size="11">暗部 0.0286（几乎不变 ✓）</text>
+        <rect x="230" y="93" width="68" height="18" fill="#dc2626"/>
+        <text x="310" y="107" font-size="11">亮部 2.82（压缩 5.6 倍）</text>
+        <text x="360" y="127" font-size="11" fill="#16a34a">平方误差比值：29.5 万倍 → 9,724 倍（↓ 30 倍）</text>
+        <text x="15" y="155" font-size="11" fill="#5f6875">用 log1p（不是 log）：log(0.001)=-6.9 会让暗部飞走；log1p(0.001)≈0.001，只压亮部不动暗部</text>
+      </svg>
+      <figcaption>log1p：暗部几乎不动（保分辨率），亮部压缩 → 平方误差比值大幅下降</figcaption>
+    </figure>
+  </section>
+
+  <!-- 4 -->
+  <section id="fix2">
+    <h3>4. 措施②：relative L2（除自身亮度）</h3>
+    <p><code>losses.py:26-54</code></p>
+    <pre>denom = pred.detach() ** 2 + self.eps      # stop-gradient
+loss  = (pred - target) ** 2 / denom</pre>
+    <table>
+      <tr><th>样本</th><th>机制</th><th>效果</th></tr>
+      <tr><td>亮部</td><td>分母大 → 误差被缩小</td><td>不再主导 loss</td></tr>
+      <tr><td>暗部</td><td>分母小 → 误差被放大</td><td>网络必须认真学</td></tr>
+    </table>
+    <div class="key">
+      <code>losses.py:17</code>：<strong>"等价于对所有亮度量级'一视同仁'，这正是 HDR 需要的。"</strong>
+    </div>
+
+    <h4>代码自带的演示（<code>python losses.py</code>）</h4>
+    <p>构造样本：<code>pred=[0.05, 3.0]</code>、<code>gt=[0.10, 3.2]</code>（暗部相对错 50%，亮部错 6%）：</p>
+    <table>
+      <tr><th>损失</th><th>暗部贡献</th><th>亮部贡献</th></tr>
+      <tr><td>MSE</td><td><strong>5.9%</strong></td><td>94.1%（亮部主导）</td></tr>
+      <tr><td><strong>relative L2</strong></td><td><strong>84.7%</strong></td><td>15.3%（主导权反转）</td></tr>
+    </table>
+    <div class="warn">
+      <strong>注意</strong>：这个演示里暗部从 6% 涨到 85% —— 说明 relative L2 的放大可能"过头"（暗部主导）。<br>
+      这正是需要 <strong>eps</strong> 来平衡的原因（见下节）。
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section id="fix3">
+    <h3>5. 措施③：eps 选型（我们基于自己数据的调优）</h3>
+    <p><code>losses.py:37-43</code> 记录了依据（<strong>用真实 GT 统计，非拍脑袋</strong>）：</p>
+    <pre>log1p(gt)² 分位数：p25=0.000, p50=0.003, p95=0.817, p99=1.813
+
+eps=0.01 (NIV 原值) → 暗部放大 76.7x，亮部 1.21x，比值 63
+eps=0.1             → 暗部放大  9.7x，亮部 1.09x，比值 8.9   ← 选这个
+eps=0.5             → 暗部放大  2.0x，亮部 0.76x，比值 2.6</pre>
+    <table>
+      <tr><th>eps</th><th>暗部放大</th><th>亮部放大</th><th>暗/亮比值</th><th>评价</th></tr>
+      <tr><td>0.01（NIV 原值）</td><td>76.7x</td><td>1.21x</td><td>63</td><td>暗部独大</td></tr>
+      <tr style="background:#f0fdf4"><td><strong>0.1（我们选）</strong></td><td><strong>9.7x</strong></td><td><strong>1.09x</strong></td><td><strong>8.9</strong></td><td>✅ 平衡（亮部≈1、暗部适度）</td></tr>
+      <tr><td>0.5</td><td>2.0x</td><td>0.76x</td><td>2.6</td><td>退化回 MSE</td></tr>
+    </table>
+    <div class="key">
+      <strong>额外考虑</strong>（<code>losses.py:42-43</code>）：<strong>25% 的格子是背面（值恒为 0）</strong> —— eps 太小会让这些样本 loss 饱和到 1 导致梯度消失；0.1 兼顾暗部学习与零值样本稳定性。
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section id="result">
+    <h3>6. ★ 实测对照实验：MSE vs relative L2</h3>
+
+    <div class="ok">
+      <strong>本节已于 2026-10-16 补跑实测对照实验。</strong><br>
+      此前只有理论预期（<code>losses.py:58</code>：MaskedMSELoss "作为对照基线，<strong>预期</strong>效果会明显差于 relative L2"）。
+      实测结果<strong>与这个预期不同</strong> —— 两者差异 &lt;0.2%（见下方）。<br>
+      <em>教训：代码注释里的"预期"不能当结论，必须用实验验证。</em>
+    </div>
+
+    <h4>✅ 已有的数据（机制验证层面，不是画质指标）</h4>
+    <table>
+      <tr><th>数据</th><th>数值</th><th>性质</th></tr>
+      <tr>
+        <td>亮部贡献占比（真实数据统计，Notes3 第 8 节）</td>
+        <td>MSE <strong>37.9%</strong> → relative L2(eps=0.1) <strong>31.7%</strong><br>（下降 6.2 个百分点）</td>
+        <td>真实数据，但只是"贡献占比"，<strong>不是画质指标</strong></td>
+      </tr>
+      <tr>
+        <td>暗/亮权重比值（eps 扫描）</td>
+        <td>NIV 原值 63 → 我们 8.9</td>
+        <td>调参依据（真实统计）</td>
+      </tr>
+      <tr>
+        <td>平方误差量级差（log1p 前后）</td>
+        <td>29.5 万倍 → 9,724 倍</td>
+        <td>理论计算（压缩效果）</td>
+      </tr>
+      <tr>
+        <td>暗部贡献（构造样本演示）</td>
+        <td>5.9% → 84.7%</td>
+        <td><code>losses.py</code> 演示脚本，<strong>非真实训练</strong></td>
+      </tr>
+    </table>
+
+    <div class="warn">
+      <strong>Notes3 第 8 节自己也承认</strong>：改善往往是<strong>温和的</strong>，不是颠覆性的 —— 因为数据已经做过 <code>log1p</code> 归一化，动态范围已被压缩，relative L2 的边际收益变小了：
+      <pre>线性域：暗 0.1 / 亮 4.5 → 平方后差 2000 倍
+log1p 后：0.095 / 1.704 → 差 322 倍（已被压小）
+→ relative L2 在此基础上再压，收益递减</pre>
+    </div>
+
+    <h4>✅ 实测对照实验（2026-10-16 补跑）</h4>
+    <p><strong>完全相同的数据与配置，只改损失函数</strong>：</p>
+    <table>
+      <tr><th>配置</th><th>值</th></tr>
+      <tr><td>数据</td><td><code>D:/ProbeDump_B_low</code>（GT：<code>B_high</code>）</td></tr>
+      <tr><td>epochs</td><td>15</td></tr>
+      <tr><td>no-history</td><td>是（<code>in_dim=52</code>，与部署一致）</td></tr>
+      <tr><td>模型 A</td><td><code>runs/b_nohist</code>（relative L2，eps=0.1）</td></tr>
+      <tr><td>模型 B</td><td><code>runs/ab_mse</code>（MSE）</td></tr>
+      <tr><td>评估</td><td>5 帧；按 GT 亮度分【暗部(最暗 50%) / 中间调 / 亮部(最亮 10%)】统计 relL2（线性域）</td></tr>
+    </table>
+
+    <h4>结果（数值越低越好）</h4>
+    <table>
+      <tr><th>指标</th><th>A: relative L2</th><th>B: MSE</th><th>差异</th></tr>
+      <tr><td>整体 MSE</td><td>0.09471</td><td>0.09476</td><td><strong>0.0%</strong></td></tr>
+      <tr><td>整体 relL2</td><td>0.21488</td><td>0.21500</td><td><strong>0.1%</strong></td></tr>
+      <tr style="background:#f0fdf4"><td><strong>暗部 relL2（关键）</strong></td><td><strong>0.26005</strong></td><td>0.26047</td><td><strong>0.2%</strong></td></tr>
+      <tr><td>中间调 relL2</td><td>0.17434</td><td>0.17408</td><td>-0.1%</td></tr>
+      <tr><td>亮部 relL2</td><td>0.15140</td><td>0.15150</td><td>0.1%</td></tr>
+    </table>
+
+    <div class="danger">
+      <strong>结论：两者几乎没有差别。</strong><br>
+      所有分区的差异都在 <strong>±0.2% 以内</strong> —— 暗部 relative L2 仅好 0.2%（0.26005 vs 0.26047），中间调反而 MSE 略好（-0.1%）。
+    </div>
+
+    <h4>怎么解读（重要）</h4>
+    <div class="key">
+      <strong>真正解决长尾的是 <code>log1p</code>，不是 relative L2。</strong><br>
+      因为数据已经 <code>log1p</code> 压缩过（动态范围从 543 倍压到 O(1)），
+      relative L2 的"再归一化"属于<strong>收益递减</strong> —— 这正好印证了 Notes3 第 8 节的预判：<br>
+      <em>"如果数据已经做过归一化，relative L2 的边际收益就变小了。"</em><br><br>
+      所以 relative L2 的定位是<strong>稳健性保险</strong>（Notes3 第 9 节）：防 outlier、保护小值样本、换数据时不失效 ——
+      <strong>而不是实测上的精度提升</strong>。
+    </div>
+
+    <div class="warn">
+      <strong>对外表述（基于实测更新）</strong>：<br>
+      "针对 radiance 的长尾分布（p50=0.029、max=15.75），采用 <strong>log1p 压缩动态范围</strong>（平方误差量级差 29.5 万倍 → 9,724 倍）+
+      relative L2 作为稳健性损失；<strong>对照实验显示</strong>：在已 log1p 的数据上，relative L2 与 MSE 的各分区误差差异 &lt;0.2%，
+      说明<strong>收益主要来自 log1p，而非损失函数的归一化</strong>。"<br>
+      <strong>不要说</strong>："relative L2 显著提升了暗部质量" —— 实测不支持（仅 0.2%）。
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section id="todo">
+    <h3>7. 实验复现方式（已跑过，可重跑验证）</h3>
+    <p>跑两组训练，其余配置完全不变，只改损失函数：</p>
+    <pre>python train/train.py --data D:/ProbeDump_B_low --gt-dir D:/ProbeDump_B_high \
+    --out runs/ab_mse --loss mse
+
+python train/train.py --data D:/ProbeDump_B_low --gt-dir D:/ProbeDump_B_high \
+    --out runs/ab_rel2 --loss relative_l2 --eps 0.1</pre>
+    <p>然后用同一套评估对比（<code>run_infer.py</code> + <code>eval_smoothness.py</code>），记录：</p>
+    <table>
+      <tr><th>指标</th><th>关注什么</th></tr>
+      <tr><td>最终 loss</td><td>两者不可直接比（量纲不同），只看各自收敛</td></tr>
+      <tr><td><strong>暗部误差</strong>（单独统计暗部样本的 relL2）</td><td>★ 关键：relative L2 应显著更好</td></tr>
+      <tr><td>整体平滑度 / 完成度</td><td>画质指标</td></tr>
+      <tr><td>肉眼对比图（暗部区域）</td><td>主观确认</td></tr>
+    </table>
+    <div class="ok">
+      补上这个实验后，"relative L2 解决长尾"就从<strong>机制设计</strong>升级为<strong>有实测支撑</strong>的结论 —— 简历上也能给出具体数字。
+    </div>
+  </section>
+
+  <p style="text-align:center;color:var(--muted);font-size:13px;margin-top:26px">
+    Notes 8 · 长尾分布与 HDR 应对 · 数据来自 probe_dataset.py:68、losses.py:5-8/37-43、Notes3 第 8 节 · 对照实验待补
+  </p>
+</main>
+</div>
+</body>
+</html>
