@@ -101,15 +101,6 @@ FAutoConsoleVariableRef CVarLumenScreenProbeFilteringWaveOps(
 	ECVF_RenderThreadSafe
 );
 
-// [++Raid] Add by weilan for Fpp View Lumen
-int32 GLumenFppForceTracesMoving = 0;
-FAutoConsoleVariableRef CVarLumenFppForceTracesMoving(
-	TEXT("r.Lumen.Fpp.ForceTracesMoving"),
-	GLumenFppForceTracesMoving,
-	TEXT("Whether to use Lumen probe force traces moving on Fpp"),
-	ECVF_Scalability | ECVF_RenderThreadSafe
-);
-// [--Raid]
 
 class FScreenProbeCompositeTracesWithScatterCS : public FGlobalShader
 {
@@ -185,9 +176,6 @@ class FScreenProbeTemporallyAccumulateTraceRadianceCS : public FGlobalShader
 		SHADER_PARAMETER_RDG_TEXTURE(Texture2D<uint>, HistoryScreenProbeSceneDepth)
 		SHADER_PARAMETER_RDG_TEXTURE(Texture2D<float3>, HistoryScreenProbeRadiance)
 		SHADER_PARAMETER_RDG_TEXTURE(Texture2D<float3>, HistoryScreenProbeTranslatedWorldPosition)
-		// [++Raid] Add by shunhuang for SecondView Render
-		SHADER_PARAMETER_RDG_UNIFORM_BUFFER(FSceneTextureUniformParameters, SceneTexturesStruct)
-		// [--Raid]
 	END_SHADER_PARAMETER_STRUCT()
 
 	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
@@ -223,9 +211,6 @@ class FScreenProbeFilterGatherTracesCS : public FGlobalShader
 		SHADER_PARAMETER(int32, SpatialFilterPassIndex)
 		SHADER_PARAMETER_STRUCT_REF(FViewUniformShaderParameters, View)
 		SHADER_PARAMETER_STRUCT_INCLUDE(FScreenProbeParameters, ScreenProbeParameters)
-		// [++Raid] Add by shunhuang for SecondView Render
-		SHADER_PARAMETER_RDG_UNIFORM_BUFFER(FSceneTextureUniformParameters, SceneTexturesStruct)
-		// [--Raid]
 	END_SHADER_PARAMETER_STRUCT()
 
 	class FScreenProbeExtraAO : SHADER_PERMUTATION_BOOL("SCREEN_PROBE_EXTRA_AO");
@@ -441,9 +426,6 @@ void FilterScreenProbes(
 	const FScreenProbeParameters& ScreenProbeParameters,
 	FScreenProbeGatherParameters& GatherParameters,
 	ERDGPassFlags ComputePassFlags
-	// [++Raid] Add by weilan for Fpp View Lumen
-	, bool bIsFppView
-	// [--Raid]
 )
 {
 	const EPixelFormat LightingDataFormat = Lumen::GetLightingDataFormat();
@@ -496,9 +478,6 @@ void FilterScreenProbes(
 		FScreenProbeCalculateMovingCS::FParameters* PassParameters = GraphBuilder.AllocParameters<FScreenProbeCalculateMovingCS::FParameters>();
 		PassParameters->RWScreenProbeMoving = GraphBuilder.CreateUAV(FRDGTextureUAVDesc(ScreenProbeMoving));
 		PassParameters->ScreenProbeTraceMoving = ScreenProbeTraceMoving;
-		// [++Raid] Mod by weilan for Fpp View Lumen
-		PassParameters->DebugForceTracesMoving = (bIsFppView && GLumenFppForceTracesMoving) ? 1.f : GLumenScreenProbeTemporalDebugForceTracesMoving != 0 ? 1.0f : 0.0f;
-		// [--Raid]
 		PassParameters->View = View.ViewUniformBuffer;
 		PassParameters->ScreenProbeParameters = ScreenProbeParameters;
 
@@ -518,10 +497,6 @@ void FilterScreenProbes(
 
 	const FRDGTextureRef CompositedScreenProbeRadiance = ScreenProbeRadiance;
 
-	// [++Raid] Mod by weilan for Fpp View Lumen
-	const FScreenProbeGatherTemporalState& ScreenProbeGatherState = bIsFppView ? View.ViewState->Lumen.FppScreenProbeGatherState : View.ViewState->Lumen.ScreenProbeGatherState;
-	// [--Raid]
-
 	const bool bUseProbeTemporalFilter = LumenScreenProbeGather::UseProbeTemporalFilter()
 		&& ScreenProbeGatherState.ProbeHistoryScreenProbeRadiance.IsValid()
 		&& ScreenProbeGatherState.HistoryScreenProbeTranslatedWorldPosition.IsValid()
@@ -540,9 +515,6 @@ void FilterScreenProbes(
 		PassParameters->View = View.ViewUniformBuffer;
 		PassParameters->SceneTextures = GetSceneTextureParameters(GraphBuilder, SceneTextures.UniformBuffer);
 		PassParameters->ScreenProbeParameters = ScreenProbeParameters;
-		// [++Raid] Add by shunhuang for SecondView Render
-		PassParameters->SceneTexturesStruct = SceneTextures.UniformBuffer;
-		// [--Raid]
 
 		PassParameters->PrevInvPreExposure = 1.0f / View.PrevViewInfo.SceneColorPreExposure;
 		PassParameters->HistoryScreenPositionScaleBias = ScreenProbeGatherState.ProbeHistoryScreenPositionScaleBias;
@@ -579,9 +551,6 @@ void FilterScreenProbes(
 
 	if (LumenScreenProbeGather::UseProbeTemporalFilter() && !View.bStatePrevViewInfoIsReadOnly)
 	{
-		// [++Raid] Mod by weilan for Fpp View Lumen
-		FScreenProbeGatherTemporalState& ScreenProbeGatherWriteableState = bIsFppView ? View.ViewState->Lumen.FppScreenProbeGatherState : View.ViewState->Lumen.ScreenProbeGatherState;
-		// [--Raid]
 		ScreenProbeGatherWriteableState.ProbeHistoryScreenProbeRadiance = GraphBuilder.ConvertToExternalTexture(CompositedScreenProbeRadiance);
 	}
 
@@ -605,9 +574,6 @@ void FilterScreenProbes(
 			PassParameters->View = View.ViewUniformBuffer;
 			PassParameters->ScreenProbeParameters = ScreenProbeParameters;
 			PassParameters->SpatialFilterPassIndex = PassIndex;
-			// [++Raid] Add by shunhuang for SecondView Render
-			PassParameters->SceneTexturesStruct = SceneTextures.UniformBuffer;
-			// [--Raid]
 
 			FScreenProbeFilterGatherTracesCS::FPermutationDomain PermutationVector;
 			PermutationVector.Set< FScreenProbeFilterGatherTracesCS::FScreenProbeExtraAO >(LumenScreenProbeGather::UseScreenProbeExtraAO());
@@ -629,9 +595,7 @@ void FilterScreenProbes(
 
 	if (!View.bStatePrevViewInfoIsReadOnly)
 	{
-		// [++Raid] Mod by weilan for Fpp View Lumen
-		FScreenProbeGatherTemporalState& ScreenProbeGatherWriteableState = (bIsFppView) ? View.ViewState->Lumen.FppScreenProbeGatherState : View.ViewState->Lumen.ScreenProbeGatherState;
-		// [--Raid]
+	
 		ScreenProbeGatherWriteableState.ImportanceSamplingHistoryScreenProbeRadiance = GraphBuilder.ConvertToExternalTexture(ScreenProbeRadiance);
 		ScreenProbeGatherWriteableState.HistoryScreenProbeSceneDepth = GraphBuilder.ConvertToExternalTexture(ScreenProbeParameters.ScreenProbeSceneDepth);
 		ScreenProbeGatherWriteableState.HistoryScreenProbeTranslatedWorldPosition = GraphBuilder.ConvertToExternalTexture(ScreenProbeParameters.ScreenProbeTranslatedWorldPosition);
