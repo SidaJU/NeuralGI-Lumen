@@ -4,6 +4,9 @@
 允许大幅降低每 probe 的射线数，从而换取净性能收益。
 
 ## 一句话
+<img width="675" height="286" alt="企业微信截图_17921374958561" src="https://github.com/user-attachments/assets/b3f3af9b-198f-42e8-afc9-ea3b8f68b94e" />
+<img width="672" height="284" alt="企业微信截图_17921374777051" src="https://github.com/user-attachments/assets/df3d655e-472b-4be1-b5f4-77f3750411c6" />
+
 
 > 让 Lumen 用 1/4 的射线，跑出一样甚至更好的 GI。
 
