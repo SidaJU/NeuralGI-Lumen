@@ -1,0 +1,815 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "{45AE176D-40EB-C2D6-33C2-83BA7FB6009D}",
+	"Category": "",
+	"Description": "",
+	"Modules": [
+		{
+			"Name": "ESGamePredefine",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "ESAnimation",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"Engine",
+				"MotionWarping"
+			]
+		},
+		{
+			"Name": "ESServer",
+			"Type": "ServerOnly",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "ESEditor",
+			"Type": "UncookedOnly",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"Engine"
+			]
+		},
+		{
+			"Name": "ESClient",
+			"Type": "ClientOnly",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "RaidGame",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"CoreUObject",
+				"Engine",
+				"LineComponent",
+				"EnhancedInput"
+			]
+		},
+		{
+			"Name": "RUI",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "RaidStatModule",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "FoveatedUpscaler",
+			"Type": "Runtime",
+			"LoadingPhase": "PostConfigInit"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "RaidLog",
+			"Enabled": true
+		},
+		{
+			"Name": "RaidLocalLightVSMOptimizer",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "GlyphForgePhysicalMaterialSetter",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "GlyphForgeTextureDensityTool",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "GlyphForgeAssetTag",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "GlyphForgeCore",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "GameplayAbilities",
+			"Enabled": true
+		},
+		{
+			"Name": "HairStrands",
+			"Enabled": true,
+			"TargetDenyList": [
+				"Server"
+			]
+		},
+		{
+			"Name": "ScriptPlugin",
+			"Enabled": true
+		},
+		{
+			"Name": "ChaosVehiclesPlugin",
+			"Enabled": true
+		},
+		{
+			"Name": "RUnLua",
+			"Enabled": true
+		},
+		{
+			"Name": "Wwise",
+			"Enabled": true
+		},
+		{
+			"Name": "ReplicationGraph",
+			"Enabled": true
+		},
+		{
+			"Name": "HDRIBackdrop",
+			"Enabled": true
+		},
+		{
+			"Name": "COSHttpHelper",
+			"Enabled": true
+		},
+		{
+			"Name": "Volumetrics",
+			"Enabled": true
+		},
+		{
+			"Name": "Bridge",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "RenderDocPlugin",
+			"Enabled": false
+		},
+		{
+			"Name": "ModelingToolsEditorMode",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "VirtualHeightfieldMesh",
+			"Enabled": true
+		},
+		{
+			"Name": "RMAFoliageTools",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/cd8704edc80c41dd9ff67a0d7cfb5515",
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "AlembicHairImporter",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "ControlRig",
+			"Enabled": true
+		},
+		{
+			"Name": "ControlRigSpline",
+			"Enabled": true
+		},
+		{
+			"Name": "AnimationLocomotionLibrary",
+			"Enabled": true
+		},
+		{
+			"Name": "AnimationWarping",
+			"Enabled": true
+		},
+		{
+			"Name": "MotionWarping",
+			"Enabled": true
+		},
+		{
+			"Name": "NiagaraFluids",
+			"Enabled": true,
+			"TargetDenyList": [
+				"Server"
+			]
+		},
+		{
+			"Name": "SunPosition",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "InstanceTool",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/0283702886e8467383899c7b791c4b40",
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "AssetImportTools",
+			"Enabled": false
+		},
+		{
+			"Name": "PhotonDestructible",
+			"Enabled": true
+		},
+		{
+			"Name": "CascadeToNiagaraConverter",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "ChaosCaching",
+			"Enabled": true,
+			"TargetDenyList": [
+				"Server"
+			]
+		},
+		{
+			"Name": "LogTrack",
+			"Enabled": true
+		},
+		{
+			"Name": "Pathfinding",
+			"Enabled": true
+		},
+		{
+			"Name": "Water",
+			"Enabled": true
+		},
+		{
+			"Name": "KSHouseBuilder",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/dd0aed36ef734677b7cb4f805f242c8c",
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "SlateInsights",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "PCG",
+			"Enabled": true
+		},
+		{
+			"Name": "GameplayInsights",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "LightingCommonTool",
+			"Enabled": true
+		},
+		{
+			"Name": "MotionTrajectory",
+			"Enabled": true
+		},
+		{
+			"Name": "PoseSearch",
+			"Enabled": true
+		},
+		{
+			"Name": "RigLogic",
+			"Enabled": true
+		},
+		{
+			"Name": "LiveLink",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "LiveLinkControlRig",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "ElectraPlayer",
+			"Enabled": true,
+			"TargetDenyList": [
+				"Server"
+			]
+		},
+		{
+			"Name": "rdTexTools",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/b0e27fb72e0f45dab675fca1ddde0aa6",
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "Tether",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/6af7e44eb9594b56b6530ca7a9ebf799",
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "HairCardGenerator",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "HairModelingToolset",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "DatasmithFBXImporter",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "DatasmithImporter",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "EditorScriptingUtilities",
+			"Enabled": true
+		},
+		{
+			"Name": "AnimatedTexturePlugin",
+			"Enabled": true,
+			"TargetDenyList": [
+				"Server"
+			]
+		},
+		{
+			"Name": "AsyncMixin",
+			"Enabled": true
+		},
+		{
+			"Name": "DLSS",
+			"Enabled": true,
+			"MarketplaceURL": "https://www.unrealengine.com/marketplace/en-US/product/nvidia-dlss"
+		},
+		{
+			"Name": "HoudiniNiagara",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/79d2dd58387c4696a0f3458275f739d6",
+			"TargetDenyList": [
+				"Server"
+			]
+		},
+		{
+			"Name": "UnLua",
+			"Enabled": true
+		},
+		{
+			"Name": "LuaProtobuf",
+			"Enabled": true
+		},
+		{
+			"Name": "StateTree",
+			"Enabled": true
+		},
+		{
+			"Name": "GameplayStateTree",
+			"Enabled": true
+		},
+		{
+			"Name": "Iris",
+			"Enabled": false
+		},
+		{
+			"Name": "ScreenSpaceFogScattering",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/260929cfa39b43238302154c98311fc7",
+			"TargetDenyList": [
+				"Server"
+			]
+		},
+		{
+			"Name": "LineComponent",
+			"Enabled": true
+		},
+		{
+			"Name": "NaniteNiagaraV2",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/Fab/product/7af421cb-abf6-42fe-8d96-b6306f4be589",
+			"TargetDenyList": [
+				"Server"
+			]
+		},
+		{
+			"Name": "Shepherd",
+			"Enabled": false,
+			"TargetAllowList": [
+				"Server"
+			],
+			"PlatformAllowList": [
+				"Linux"
+			]
+		},
+		{
+			"Name": "PhysicalLayout",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/349bf2d4b1a945fa8f31db80fabf8058",
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "SnapSystem",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/fa834687594944f5aafe2be8b44ad3f1",
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "Voxel",
+			"Enabled": false
+		},
+		{
+			"Name": "DSSDK",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor",
+				"Server"
+			]
+		},
+		{
+			"Name": "InGameDS",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor",
+				"Server"
+			]
+		},
+		{
+			"Name": "InGameProtocol",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Server",
+				"Editor"
+			]
+		},
+		{
+			"Name": "RaidProtocol",
+			"Enabled": true
+		},
+		{
+			"Name": "InGameSDK",
+			"Enabled": true,
+			"TargetDenyList": [
+				"Server"
+			]
+		},
+		{
+			"Name": "UltronMLPlugin",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor",
+				"Server"
+			]
+		},
+		{
+			"Name": "EngineVirtualization",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Server"
+			],
+			"PlatformAllowList": [
+				"Linux"
+			]
+		},
+		{
+			"Name": "SeedDSAdapter",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Server"
+			],
+			"PlatformAllowList": [
+				"Linux"
+			]
+		},
+		{
+			"Name": "SeedMode",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Server"
+			],
+			"PlatformAllowList": [
+				"Linux"
+			]
+		},
+		{
+			"Name": "LBUSConnector",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Server"
+			],
+			"PlatformAllowList": [
+				"Linux"
+			]
+		},
+		{
+			"Name": "GameSvrRPC",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Server"
+			],
+			"PlatformAllowList": [
+				"Linux"
+			]
+		},
+		{
+			"Name": "RaidDS",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Server"
+			],
+			"PlatformAllowList": [
+				"Linux"
+			]
+		},
+		{
+			"Name": "SkeletalMerging",
+			"Enabled": true
+		},
+		{
+			"Name": "GameplayStateTree",
+			"Enabled": true
+		},
+		{
+			"Name": "ChaosClothRaycast",
+			"Enabled": true
+		},
+		{
+			"Name": "SubtitlesAndClosedCaptions",
+			"Enabled": true,
+			"TargetDenyList": [
+				"Server"
+			]
+		},
+		{
+			"Name": "Mutable",
+			"Enabled": true,
+			"TargetDenyList": [
+				"Server"
+			]
+		},
+		{
+			"Name": "MaterialOptimizer",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "PythonScriptPlugin",
+			"Enabled": true
+		},
+		{
+			"Name": "FastGeoStreaming",
+			"Enabled": false
+		},
+		{
+			"Name": "UnrealMCP",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "OpacityMicroMap",
+			"Enabled": false
+		},
+		{
+			"Name": "IndoorCullingDebugger",
+			"Enabled": true
+		},
+		{
+			"Name": "AIPDExporter",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "AIPD_AIPlugin",
+			"Enabled": true
+		},
+		{
+			"Name": "VFXToolKit",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "VFXToolKitEditor",
+			"Enabled": false,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "FXAtlas",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "OpenColorIO",
+			"Enabled": false
+		},
+		{
+			"Name": "TOmniverse",
+			"Enabled": false,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "USDCore",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor",
+				"Server"
+			]
+		},
+		{
+			"Name": "USDImporter",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "MovieRenderPipeline",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "OnlineSubsystemSteam",
+			"Enabled": true,
+			"TargetDenyList": [
+				"Server"
+			]
+		},
+		{
+			"Name": "PhysicsControl",
+			"Enabled": true
+		},
+		{
+			"Name": "MSDKPIXCore",
+			"Enabled": true
+		},
+		{
+			"Name": "PyToolkit",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "RCinePath",
+			"Enabled": true,
+			"SupportedTargetPlatforms": [
+				"Win64"
+			]
+		},
+		{
+			"Name": "OFootIK",
+			"Enabled": true
+		},
+		{
+			"Name": "ImGui",
+			"Enabled": true,
+			"TargetConfigurationDenyList": [
+				"Shipping"
+			]
+		},
+		{
+			"Name": "RaidPSOCollector",
+			"Enabled": true,
+			"PlatformAllowList": [
+				"Win64"
+			],
+			"TargetAllowList": [
+				"Game",
+				"Client"
+			],
+			"TargetConfigurationDenyList": [
+				"Shipping"
+			]
+		},
+		{
+			"Name": "RaidDebugUI",
+			"Enabled": true,
+			"TargetConfigurationDenyList": [
+				"Shipping"
+			]
+		},
+		{
+			"Name": "StackfulCoro",
+			"Enabled": true
+		},
+		{
+			"Name": "StackfulCoroAdapter",
+			"Enabled": true
+		},
+		{
+			"Name": "LegacyPushModelAuditor",
+			"Enabled": true
+		},
+		{
+			"Name": "DecalBake",
+			"Enabled": true
+		},
+		{
+			"Name": "NaniteOfflineBatching",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "AssemblyBaker",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "BillboardClusterBaker",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "TUSD",
+			"Enabled": false
+		},
+		{
+			"Name": "LightCraft",
+			"Enabled": false
+		},
+		{
+			"Name": "NNERuntimeRDG",
+			"Enabled": true
+		},
+		{
+			"Name": "NNERuntimeORT",
+			"Enabled": true
+		}
+	],
+	"TargetPlatforms": [
+		"Android",
+		"IOS",
+		"LinuxNoEditor",
+		"MacNoEditor",
+		"WindowsNoEditor",
+		"Windows",
+		"PS5"
+	]
+}
